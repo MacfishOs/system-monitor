@@ -52,7 +52,7 @@ FishUI.Window {
         RowLayout {
             anchors.fill: parent
             anchors.leftMargin: 20
-            anchors.rightMargin: 12
+            anchors.rightMargin: rootWindow.windowButtonsSpacing
             spacing: 12
 
             FishUI.AlignedLabel {
@@ -74,6 +74,18 @@ FishUI.Window {
                 font.pointSize: 11
                 color: rootWindow.active ? FishUI.Theme.textColor : FishUI.Theme.disabledTextColor
             }
+
+            FishUI.HeaderButton {
+                id: intervalButton
+                objectName: "refreshInterval"
+                Layout.alignment: Qt.AlignTop
+                Layout.topMargin: rootWindow.windowButtonsTopMargin
+                size: rootWindow.header.buttonSize
+                artwork: "menu"
+                checked: intervalMenu.visible
+                onClicked: intervalMenu.popup()
+                Accessible.name: qsTr("Update interval")
+            }
         }
     }
 
@@ -83,7 +95,7 @@ FishUI.Window {
         anchors.left: parent.left
         anchors.top: parent.top
         anchors.topMargin: rootWindow.header.height
-        anchors.bottom: footer.top
+        anchors.bottom: parent.bottom
         width: rootWindow.sidebarWidth
         contentHeight: sidebarContent.height + 24
         clip: true
@@ -207,34 +219,21 @@ FishUI.Window {
         }
     }
 
-    Item {
-        id: footer
-        anchors.left: parent.left
-        anchors.bottom: parent.bottom
-        width: rootWindow.sidebarWidth
-        height: 52
+    FishUI.DesktopMenu {
+        id: intervalMenu
+        pointerGrabEnabled: true
 
-        FishUI.ComboBox {
-            id: intervalSelector
-            objectName: "refreshInterval"
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.leftMargin: 12
-            anchors.rightMargin: 12
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: 12
-            height: 28
-            font.pointSize: 9
-            model: [qsTr("Every second"), qsTr("Every 2 seconds"), qsTr("Every 5 seconds")]
-            onActivated: Monitor.interval = [1000, 2000, 5000][currentIndex]
-            Accessible.name: qsTr("Update interval")
+        Repeater {
+            model: [
+                { text: qsTr("Update Every Second"), interval: 1000 },
+                { text: qsTr("Update Every 2 Seconds"), interval: 2000 },
+                { text: qsTr("Update Every 5 Seconds"), interval: 5000 }
+            ]
 
-            background: FishUI.RoundedRectangle {
-                radius: FishUI.Theme.smallRadius
-                color: FishUI.Theme.secondBackgroundColor
-                border.width: 1
-                border.color: intervalSelector.activeFocus || intervalSelector.menuVisible
-                              ? FishUI.Theme.highlightColor : color
+            FishUI.MenuItem {
+                text: modelData.text
+                checked: Monitor.interval === modelData.interval
+                onTriggered: Monitor.interval = modelData.interval
             }
         }
     }

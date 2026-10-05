@@ -338,11 +338,21 @@ void UiTest::measuredAlignment()
     auto interval = window->findChild<QQuickItem *>(QStringLiteral("refreshInterval"));
     auto list = window->findChild<QQuickItem *>(QStringLiteral("processList"));
     QVERIFY(endButton && interval && list);
+    QQuickItem *minimizeButton = nullptr;
+    for (auto item : window->findChildren<QQuickItem *>()) {
+        if (item->window() == window && item->property("artwork").toString() == QStringLiteral("minimize"))
+            minimizeButton = item;
+    }
+    QVERIFY(minimizeButton);
+    const QRectF intervalRect = interval->mapRectToScene(interval->boundingRect());
+    const QRectF minimizeRect = minimizeButton->mapRectToScene(minimizeButton->boundingRect());
+    QCOMPARE(intervalRect.size(), minimizeRect.size());
+    QCOMPARE(intervalRect.top(), minimizeRect.top());
+    QCOMPARE(minimizeRect.left() - intervalRect.right(), window->property("windowButtonsSpacing").toReal());
     const qreal actionInset = window->height() - endButton->mapToScene(QPointF(0, endButton->height())).y();
-    const qreal intervalInset = window->height() - interval->mapToScene(QPointF(0, interval->height())).y();
     const qreal actionRightInset = window->width() - endButton->mapToScene(QPointF(endButton->width(), 0)).x();
     qInfo() << "Process action bottom inset:" << actionInset
-            << "Sidebar interval bottom inset:" << intervalInset
+            << "Interval button rect:" << intervalRect << "minimize button rect:" << minimizeRect
             << "Process action right inset:" << actionRightInset
             << "Process list height:" << list->height();
     QTRY_VERIFY_WITH_TIMEOUT(monitor.ready(), 5000);
