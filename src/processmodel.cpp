@@ -3,6 +3,8 @@
 
 #include "processmodel.h"
 
+#include <QFileInfo>
+
 #include <algorithm>
 #include <unistd.h>
 
@@ -94,9 +96,24 @@ const ProcessRecord *ProcessModel::find(int pid) const
     return position != m_processes.cend() && position->pid == pid ? &*position : nullptr;
 }
 
+// The kernel cuts a process name to 15 bytes; the program or script it runs
+// names it in full. A login shell's "-bash" names nothing.
+static QString programName(const ProcessRecord &process)
+{
+    QString executable = process.executable;
+    if (executable.endsWith(QLatin1String(" (deleted)")))
+        executable.chop(10);
+    for (const QString &path : { process.program, executable }) {
+        const QString name = QFileInfo(path).fileName();
+        if (!name.isEmpty() && !name.startsWith(QLatin1Char('-')))
+            return name;
+    }
+    return process.name;
+}
+
 QVariantMap ProcessModel::describe(const ProcessRecord &process)
 {
-    return {
+    QVariantMap result {
         { QStringLiteral("pid"), process.pid },
         { QStringLiteral("parentPid"), process.parentPid },
         { QStringLiteral("name"), process.displayName },
@@ -116,6 +133,31 @@ QVariantMap ProcessModel::describe(const ProcessRecord &process)
         { QStringLiteral("command"), process.command },
         { QStringLiteral("executable"), process.executable }
     };
+    if (process.members.empty())
+        return result;
+
+    QVariantList members;
+    for (const ProcessRecord &member : process.members) {
+        members.append(QVariantMap {
+            { QStringLiteral("pid"), member.pid },
+            { QStringLiteral("name"), programName(member) },
+            { QStringLiteral("cpu"), member.cpu },
+            { QStringLiteral("memory"), member.pssAvailable ? member.pss : member.memory }
+        });
+    }
+    result.insert(QStringLiteral("application"), true);
+    result.insert(QStringLiteral("processCount"), members.size());
+    result.insert(QStringLiteral("members"), members);
+    return result;
+}
+
+static bool matches(const ProcessRecord &process, const QString &query)
+{
+    return process.name.contains(query, Qt::CaseInsensitive)
+            || process.displayName.contains(query, Qt::CaseInsensitive)
+            || process.command.contains(query, Qt::CaseInsensitive)
+            || process.user.contains(query, Qt::CaseInsensitive)
+            || QString::number(process.pid).contains(query);
 }
 
 ProcessFilter::ProcessFilter(ProcessModel *source, QObject *parent)
@@ -203,11 +245,12 @@ bool ProcessFilter::filterAcceptsRow(int row, const QModelIndex &parent) const
     if (query.isEmpty())
         return true;
     const auto process = qobject_cast<ProcessModel *>(source)->find(source->data(index, ProcessModel::PidRole).toInt());
-    return process && (process->name.contains(query, Qt::CaseInsensitive)
-                       || process->displayName.contains(query, Qt::CaseInsensitive)
-                       || process->command.contains(query, Qt::CaseInsensitive)
-                       || process->user.contains(query, Qt::CaseInsensitive)
-                       || QString::number(process->pid).contains(query));
+    if (!process)
+        return false;
+    return matches(*process, query) || std::any_of(process->members.cbegin(), process->members.cend(),
+                                                   [&query](const ProcessRecord &member) {
+        return matches(member, query);
+    });
 }
 
 bool ProcessFilter::lessThan(const QModelIndex &left, const QModelIndex &right) const

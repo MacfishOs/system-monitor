@@ -18,6 +18,7 @@ FishUI.RoundedRectangle {
     property real maximum: 100
     property string primaryLegend
     property string secondaryLegend
+    property string scaleLabel
 
     implicitHeight: 276
     radius: FishUI.Theme.bigRadius
@@ -55,7 +56,8 @@ FishUI.RoundedRectangle {
         FishUI.Label {
             objectName: "chartScaleLabel"
             Layout.alignment: Qt.AlignRight
-            text: control.maximum > 0 ? "100%" : Monitor.formatRate(graph.effectiveMaximum)
+            text: control.scaleLabel.length > 0 ? control.scaleLabel
+                  : control.maximum > 0 ? "100%" : Monitor.formatRate(graph.effectiveMaximum)
             font.pointSize: 8
             color: FishUI.Theme.disabledTextColor
         }

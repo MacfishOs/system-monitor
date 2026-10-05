@@ -11,6 +11,8 @@
 #include <QLocale>
 #include <QtConcurrent>
 
+#include <algorithm>
+
 #include <cerrno>
 #include <cstring>
 #include <signal.h>
@@ -21,6 +23,8 @@ Monitor::Monitor(QObject *parent)
     : QObject(parent)
     , m_model(this)
     , m_filter(&m_model, this)
+    , m_applicationModel(this)
+    , m_applicationFilter(&m_applicationModel, this)
     , m_reader(std::make_shared<ProcReader>())
 {
     m_metrics = ProcReader::parseMemory({});
@@ -28,12 +32,17 @@ Monitor::Monitor(QObject *parent)
                               QStringLiteral("upload"), QStringLiteral("diskRead"),
                               QStringLiteral("diskWrite"),
                               QStringLiteral("received"), QStringLiteral("sent"),
-                              QStringLiteral("processCount"), QStringLiteral("coreCount") })
+                              QStringLiteral("processCount"), QStringLiteral("coreCount"),
+                              QStringLiteral("gpuPercent"), QStringLiteral("gpuTemperature") })
         m_metrics.insert(key, 0);
     for (const QString &key : { QStringLiteral("cores"), QStringLiteral("interfaces"),
-                              QStringLiteral("disks"), QStringLiteral("volumes") })
+                              QStringLiteral("disks"), QStringLiteral("volumes"), QStringLiteral("gpus") })
         m_metrics.insert(key, QVariantList());
+    for (const QString &key : { QStringLiteral("gpuAvailable"), QStringLiteral("gpuHasBusy"),
+                              QStringLiteral("gpuHasTemperature") })
+        m_metrics.insert(key, false);
     m_metrics.insert(QStringLiteral("cpuName"), QString());
+    m_metrics.insert(QStringLiteral("gpuName"), QString());
     m_historyClock.start();
     m_timer.setInterval(1000);
     connect(&m_timer, &QTimer::timeout, this, &Monitor::sample);
@@ -43,6 +52,7 @@ Monitor::Monitor(QObject *parent)
     });
     connect(ApplicationRegistry::instance(), &ApplicationRegistry::applicationsChanged, this, [this] {
         m_applications.clear();
+        m_applicationIds.clear();
     });
     m_timer.start();
     sample();
@@ -55,6 +65,7 @@ Monitor::~Monitor()
 
 QVariantMap Monitor::metrics() const { return m_metrics; }
 ProcessFilter *Monitor::processes() { return &m_filter; }
+ProcessFilter *Monitor::applications() { return &m_applicationFilter; }
 bool Monitor::ready() const { return m_ready; }
 QString Monitor::error() const { return m_error; }
 int Monitor::interval() const { return m_timer.interval(); }
@@ -87,8 +98,9 @@ void Monitor::sample()
     if (m_watcher.isRunning())
         return;
     const auto reader = m_reader;
-    m_watcher.setFuture(QtConcurrent::run([reader] {
-        return reader->sample();
+    const QSet<int> applicationPids = m_applicationPids;
+    m_watcher.setFuture(QtConcurrent::run([reader, applicationPids] {
+        return reader->sample(applicationPids);
     }));
 }
 
@@ -109,11 +121,13 @@ void Monitor::acceptSample()
         for (ProcessRecord &process : snapshot.processes)
             identify(&process);
         m_model.apply(snapshot.processes);
+        m_applicationModel.apply(groupApplications(snapshot.processes));
         const qint64 timestamp = m_historyClock.elapsed();
         m_historyTimes.append(timestamp);
         for (const QString &key : { QStringLiteral("cpuPercent"), QStringLiteral("memoryPercent"),
                                   QStringLiteral("download"), QStringLiteral("upload"),
-                                  QStringLiteral("diskRead"), QStringLiteral("diskWrite") }) {
+                                  QStringLiteral("diskRead"), QStringLiteral("diskWrite"),
+                                  QStringLiteral("gpuPercent"), QStringLiteral("gpuTemperature") }) {
             auto &values = m_history[key];
             values.append(m_metrics.value(key));
         }
@@ -129,6 +143,15 @@ void Monitor::acceptSample()
     emit updated();
 }
 
+Monitor::Application Monitor::describeEntry(DesktopEntry *entry)
+{
+    if (!entry)
+        return {};
+    // Hidden entries (Xwayland, handlers) name a process but are no application.
+    const bool listed = !entry->noDisplay() && !entry->hidden();
+    return { listed ? entry->id() : QString(), entry->name(), entry->icon() };
+}
+
 void Monitor::identify(ProcessRecord *process)
 {
     if (process->program.isEmpty())
@@ -142,12 +165,125 @@ void Monitor::identify(ProcessRecord *process)
         DesktopEntry *entry = ApplicationRegistry::instance()->resolveWindow(name, QString(),
                                                                              process->program, name);
         application = m_applications.insert(process->program,
-                                            entry ? Application { entry->name(), entry->icon() } : Application());
+                                            describeEntry(entry));
     }
+    process->appId = application->id;
     if (!application->name.isEmpty())
         process->displayName = application->name;
     if (!application->icon.isEmpty())
         process->iconName = application->icon;
+}
+
+QVector<ProcessRecord> Monitor::groupApplications(const QVector<ProcessRecord> &processes)
+{
+    const uint uid = getuid();
+    QHash<int, int> rows;
+    for (int i = 0; i < processes.size(); ++i)
+        rows.insert(processes[i].pid, i);
+
+    // A process with a desktop entry of its own is that application; one
+    // without joins its nearest such ancestor, then the application cgroup
+    // a launcher put it in. A browser started from a terminal stays apart.
+    QHash<QString, QVector<int>> groups;
+    QStringList order;
+    for (int i = 0; i < processes.size(); ++i) {
+        const ProcessRecord &process = processes[i];
+        if (process.uid != uid || process.kernelThread)
+            continue;
+
+        QString id = process.appId;
+        int ancestor = rows.value(process.parentPid, -1);
+        for (int depth = 0; id.isEmpty() && ancestor >= 0 && depth < 64; ++depth) {
+            const ProcessRecord &parent = processes[ancestor];
+            if (parent.uid != uid || parent.pid <= 1)
+                break;
+            id = parent.appId;
+            ancestor = rows.value(parent.parentPid, -1);
+        }
+        if (id.isEmpty() && !process.scopeId.isEmpty()) {
+            auto scope = m_applicationIds.constFind(process.scopeId);
+            if (scope == m_applicationIds.cend()) {
+                DesktopEntry *entry = ApplicationRegistry::instance()->byId(process.scopeId);
+                scope = m_applicationIds.insert(process.scopeId, describeEntry(entry));
+            }
+            id = scope->id;
+        }
+        if (id.isEmpty())
+            continue;
+        if (!groups.contains(id))
+            order.append(id);
+        groups[id].append(i);
+    }
+
+    QVector<ProcessRecord> applications;
+    m_applicationPids.clear();
+    for (const QString &id : std::as_const(order)) {
+        const QVector<int> &indexes = groups[id];
+        QSet<int> pids;
+        for (const int index : indexes)
+            pids.insert(processes[index].pid);
+
+        // The oldest process the application started itself stands for it.
+        const ProcessRecord *main = nullptr;
+        for (const int index : indexes) {
+            const ProcessRecord &process = processes[index];
+            if (pids.contains(process.parentPid))
+                continue;
+            const bool own = process.appId == id;
+            const bool mainOwn = main && main->appId == id;
+            if (!main || (own && !mainOwn) || (own == mainOwn && process.startTicks < main->startTicks))
+                main = &process;
+        }
+
+        auto application = m_applicationIds.constFind(id);
+        if (application == m_applicationIds.cend()) {
+            DesktopEntry *entry = ApplicationRegistry::instance()->byId(id);
+            application = m_applicationIds.insert(id, entry ? Application { entry->id(), entry->name(), entry->icon() }
+                                                            : Application { id, main->displayName, main->iconName });
+        }
+
+        ProcessRecord group = *main;
+        group.appId = id;
+        group.displayName = application->name.isEmpty() ? main->displayName : application->name;
+        group.iconName = application->icon.isEmpty() ? main->iconName : application->icon;
+        group.cpu = 0;
+        group.memory = 0;
+        group.readRate = 0;
+        group.writeRate = 0;
+        group.threads = 0;
+        group.ioAvailable = false;
+        group.pssAvailable = true;
+        for (const int index : indexes) {
+            const ProcessRecord &process = processes[index];
+            group.cpu += process.cpu;
+            group.memory += process.pssAvailable ? process.pss : process.memory;
+            group.pssAvailable = group.pssAvailable && process.pssAvailable;
+            group.threads += process.threads;
+            if (process.ioAvailable) {
+                group.ioAvailable = true;
+                group.readRate += process.readRate;
+                group.writeRate += process.writeRate;
+            }
+            group.members.push_back(process);
+            m_applicationPids.insert(process.pid);
+        }
+        group.cpu = qMin(100.0, group.cpu);
+        applications.append(group);
+    }
+
+    std::sort(applications.begin(), applications.end(), [](const auto &left, const auto &right) {
+        return left.pid < right.pid;
+    });
+    return applications;
+}
+
+bool Monitor::canManage(const ProcessRecord &process)
+{
+    if (process.members.empty())
+        return process.uid == getuid() && process.pid > 1 && process.pid != getpid();
+    return std::all_of(process.members.cbegin(), process.members.cend(), [](const ProcessRecord &member) {
+        return canManage(member);
+    });
 }
 
 QVariantMap Monitor::process(int pid, const QString &startTicks) const
@@ -156,9 +292,56 @@ QVariantMap Monitor::process(int pid, const QString &startTicks) const
     if (!record || QString::number(record->startTicks) != startTicks)
         return {};
     QVariantMap result = ProcessModel::describe(*record);
-    result.insert(QStringLiteral("canManage"), record->uid == getuid()
-                  && pid > 1 && pid != getpid());
+    result.insert(QStringLiteral("canManage"), canManage(*record));
     return result;
+}
+
+QVariantMap Monitor::application(int pid, const QString &startTicks) const
+{
+    const auto record = m_applicationModel.find(pid);
+    if (!record || QString::number(record->startTicks) != startTicks)
+        return {};
+    QVariantMap result = ProcessModel::describe(*record);
+    result.insert(QStringLiteral("canManage"), canManage(*record));
+    return result;
+}
+
+QString Monitor::endApplication(int pid, const QString &startTicks, bool force)
+{
+    const auto record = m_applicationModel.find(pid);
+    if (!record || QString::number(record->startTicks) != startTicks)
+        return tr("The application has already quit.");
+    if (!canManage(*record))
+        return tr("This application cannot be quit here.");
+
+    // Asking only the processes the application started lets it close its
+    // own children; forcing it stops every one of them.
+    QSet<int> pids;
+    for (const ProcessRecord &member : record->members)
+        pids.insert(member.pid);
+    QString error;
+    bool signalled = false;
+    for (const ProcessRecord &member : record->members) {
+        if (!force && pids.contains(member.parentPid))
+            continue;
+        const QString result = signalProcess(member.pid, member.startTicks, force);
+        if (result.isEmpty())
+            signalled = true;
+        else if (result != tr("The process has already exited.") && error.isEmpty())
+            error = result;
+    }
+    if (!error.isEmpty())
+        return error;
+    if (!signalled)
+        return tr("The application has already quit.");
+    sample();
+    return {};
+}
+
+void Monitor::sortBy(const QString &column)
+{
+    m_filter.sortBy(column);
+    m_applicationFilter.sortBy(column);
 }
 
 QString Monitor::endProcess(int pid, const QString &startTicks, bool force)
@@ -225,6 +408,11 @@ QString Monitor::formatRate(double bytes) const
 QString Monitor::formatPercent(double percent) const
 {
     return QLocale().toString(percent, 'f', 1) + QLatin1Char('%');
+}
+
+QString Monitor::formatTemperature(double celsius) const
+{
+    return QLocale().toString(celsius, 'f', 0) + QStringLiteral(" °C");
 }
 
 void Monitor::activateWindow()

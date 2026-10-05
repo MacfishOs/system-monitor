@@ -11,12 +11,13 @@ FishUI.Window {
     objectName: "processDetailsWindow"
     property int pid: 0
     property string startTicks: ""
+    property bool application: false
     readonly property var process: {
         Monitor.metrics;
-        return Monitor.process(pid, startTicks);
+        return application ? Monitor.application(pid, startTicks) : Monitor.process(pid, startTicks);
     }
 
-    title: qsTr("Process Details")
+    title: application ? qsTr("Application Details") : qsTr("Process Details")
     visible: false
     flags: Qt.Dialog | Qt.FramelessWindowHint
     modality: Qt.WindowModal
@@ -60,7 +61,7 @@ FishUI.Window {
                 spacing: 4
                 FishUI.Label {
                     Layout.fillWidth: true
-                    text: dialog.process.name || qsTr("Process exited")
+                    text: dialog.process.name || (dialog.application ? qsTr("Application quit") : qsTr("Process exited"))
                     textFormat: Text.PlainText
                     font.pointSize: 12
                     font.weight: Font.Medium
@@ -95,6 +96,13 @@ FishUI.Window {
                     Layout.fillWidth: true
                     label: qsTr("State")
                     value: dialog.process.state || qsTr("Exited")
+                    visible: !dialog.application
+                }
+                DetailRow {
+                    Layout.fillWidth: true
+                    label: qsTr("Processes")
+                    value: dialog.process.processCount || "—"
+                    visible: dialog.application
                 }
                 DetailRow {
                     Layout.fillWidth: true
@@ -115,25 +123,70 @@ FishUI.Window {
                     Layout.fillWidth: true
                     label: qsTr("Nice value")
                     value: dialog.process.nice === undefined ? "—" : dialog.process.nice
+                    visible: !dialog.application
                 }
                 DetailRow {
                     Layout.fillWidth: true
                     label: qsTr("Parent process")
                     value: dialog.process.parentPid || "—"
+                    visible: !dialog.application
                 }
             }
         }
 
         FishUI.Label {
-            text: qsTr("Command")
+            text: dialog.application ? qsTr("Processes") : qsTr("Command")
             font.pointSize: 9
             color: FishUI.Theme.disabledTextColor
+        }
+
+        ListView {
+            id: memberList
+            objectName: "applicationProcesses"
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            visible: dialog.application
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            model: dialog.application && dialog.process.members ? dialog.process.members.length : 0
+            FishUI.WheelHandler {
+                target: memberList
+            }
+            FishUI.ScrollBar.vertical: FishUI.ScrollBar {}
+
+            delegate: RowLayout {
+                required property int index
+                readonly property var member: dialog.process.members[index] || ({})
+                width: memberList.width
+                height: 28
+                spacing: 12
+                FishUI.Label {
+                    Layout.fillWidth: true
+                    text: member.name || ""
+                    textFormat: Text.PlainText
+                    font.pointSize: 9
+                    elide: Text.ElideRight
+                }
+                FishUI.Label {
+                    text: Monitor.formatBytes(member.memory || 0)
+                    font.pointSize: 9
+                    color: FishUI.Theme.disabledTextColor
+                }
+                FishUI.Label {
+                    Layout.preferredWidth: 64
+                    text: member.pid || ""
+                    font.pointSize: 9
+                    color: FishUI.Theme.disabledTextColor
+                    horizontalAlignment: Text.AlignRight
+                }
+            }
         }
 
         ScrollView {
             id: commandView
             Layout.fillWidth: true
             Layout.fillHeight: true
+            visible: !dialog.application
             clip: true
             FishUI.ScrollBar.vertical: FishUI.ScrollBar {}
 
@@ -152,6 +205,7 @@ FishUI.Window {
             Layout.alignment: Qt.AlignRight
             FishUI.ConfirmDialogButton {
                 text: qsTr("Copy")
+                visible: !dialog.application
                 enabled: !!dialog.process.pid
                 onClicked: Monitor.copyText(dialog.process.command || dialog.process.executable || "")
             }

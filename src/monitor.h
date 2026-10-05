@@ -11,6 +11,8 @@
 #include <QTimer>
 #include <memory>
 
+class DesktopEntry;
+
 class Monitor : public QObject
 {
     Q_OBJECT
@@ -18,6 +20,7 @@ class Monitor : public QObject
     Q_PROPERTY(QVariantMap metrics READ metrics NOTIFY updated)
     Q_PROPERTY(QVariantMap history READ history NOTIFY updated)
     Q_PROPERTY(ProcessFilter *processes READ processes CONSTANT)
+    Q_PROPERTY(ProcessFilter *applications READ applications CONSTANT)
     Q_PROPERTY(bool ready READ ready NOTIFY updated)
     Q_PROPERTY(QString error READ error NOTIFY updated)
     Q_PROPERTY(int interval READ interval WRITE setInterval NOTIFY intervalChanged)
@@ -30,6 +33,7 @@ public:
     QVariantMap metrics() const;
     QVariantMap history() const;
     ProcessFilter *processes();
+    ProcessFilter *applications();
     bool ready() const;
     QString error() const;
     int interval() const;
@@ -38,9 +42,13 @@ public:
 
     Q_INVOKABLE QVariantMap process(int pid, const QString &startTicks) const;
     Q_INVOKABLE QString endProcess(int pid, const QString &startTicks, bool force);
+    Q_INVOKABLE QVariantMap application(int pid, const QString &startTicks) const;
+    Q_INVOKABLE QString endApplication(int pid, const QString &startTicks, bool force);
+    Q_INVOKABLE void sortBy(const QString &column);
     Q_INVOKABLE QString formatBytes(double bytes) const;
     Q_INVOKABLE QString formatRate(double bytes) const;
     Q_INVOKABLE QString formatPercent(double percent) const;
+    Q_INVOKABLE QString formatTemperature(double celsius) const;
     Q_INVOKABLE void copyText(const QString &text);
     static QString signalProcess(int pid, quint64 startTicks, bool force);
 
@@ -57,15 +65,24 @@ private:
     void sample();
     void acceptSample();
     void identify(ProcessRecord *process);
+    QVector<ProcessRecord> groupApplications(const QVector<ProcessRecord> &processes);
+    static bool canManage(const ProcessRecord &process);
 
     struct Application
     {
+        QString id;
         QString name;
         QString icon;
     };
 
+    static Application describeEntry(DesktopEntry *entry);
+
     ProcessModel m_model;
     ProcessFilter m_filter;
+    ProcessModel m_applicationModel;
+    ProcessFilter m_applicationFilter;
+    QSet<int> m_applicationPids;
+    QHash<QString, Application> m_applicationIds;
     std::shared_ptr<ProcReader> m_reader;
     QFutureWatcher<Snapshot> m_watcher;
     QFutureWatcher<QVariantList> m_volumeWatcher;

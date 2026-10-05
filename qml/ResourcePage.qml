@@ -11,6 +11,7 @@ Flickable {
     objectName: "resourcePage"
     required property int page
     readonly property var metrics: Monitor.metrics
+    readonly property bool gpuTemperatureChart: page === 5 && !metrics.gpuHasBusy
     contentHeight: content.height + 36
     clip: true
     boundsBehavior: Flickable.StopAtBounds
@@ -31,23 +32,31 @@ Flickable {
             objectName: "resourceChart"
             Layout.fillWidth: true
             Layout.preferredHeight: 276
-            title: ["", qsTr("Processor activity"), qsTr("Memory usage"), qsTr("Network activity"), qsTr("Disk activity")][view.page]
+            title: view.gpuTemperatureChart ? qsTr("Graphics temperature")
+                                            : ["", qsTr("Processor activity"), qsTr("Memory usage"), qsTr("Network activity"),
+                                               qsTr("Disk activity"), qsTr("Graphics activity")][view.page]
             value: view.page === 1 ? Monitor.formatPercent(view.metrics.cpuPercent)
                    : view.page === 2 ? Monitor.formatPercent(view.metrics.memoryPercent)
                    : view.page === 3 ? Monitor.formatRate(view.metrics.download)
-                                     : Monitor.formatRate(view.metrics.diskRead)
+                   : view.page === 4 ? Monitor.formatRate(view.metrics.diskRead)
+                   : view.gpuTemperatureChart ? Monitor.formatTemperature(view.metrics.gpuTemperature)
+                                              : Monitor.formatPercent(view.metrics.gpuPercent)
             subtitle: view.page === 1 ? view.metrics.cpuName
                       : view.page === 2 ? qsTr("%1 of %2 in use").arg(Monitor.formatBytes(view.metrics.memoryUsed)).arg(Monitor.formatBytes(view.metrics.memoryTotal))
-                      : view.page === 3 ? qsTr("Physical network interfaces") : qsTr("Physical disks")
+                      : view.page === 3 ? qsTr("Physical network interfaces")
+                      : view.page === 4 ? qsTr("Physical disks") : view.metrics.gpuName
             chartColor: [FishUI.Theme.blueColor, FishUI.Theme.blueColor, FishUI.Theme.purpleColor,
-                         FishUI.Theme.greenColor, FishUI.Theme.orangeColor][view.page]
+                         FishUI.Theme.greenColor, FishUI.Theme.orangeColor, FishUI.Theme.pinkColor][view.page]
             secondaryColor: view.page === 3 ? FishUI.Theme.blueColor : FishUI.Theme.purpleColor
             values: view.page === 1 ? Monitor.history.cpuPercent || []
                     : view.page === 2 ? Monitor.history.memoryPercent || []
-                    : view.page === 3 ? Monitor.history.download || [] : Monitor.history.diskRead || []
+                    : view.page === 3 ? Monitor.history.download || []
+                    : view.page === 4 ? Monitor.history.diskRead || []
+                    : view.gpuTemperatureChart ? Monitor.history.gpuTemperature || [] : Monitor.history.gpuPercent || []
             secondaryValues: view.page === 3 ? Monitor.history.upload || []
                              : view.page === 4 ? Monitor.history.diskWrite || [] : []
-            maximum: view.page <= 2 ? 100 : 0
+            maximum: view.page <= 2 || view.page === 5 ? 100 : 0
+            scaleLabel: view.gpuTemperatureChart ? Monitor.formatTemperature(100) : ""
             primaryLegend: view.page === 3 ? qsTr("Download") : view.page === 4 ? qsTr("Read") : ""
             secondaryLegend: view.page === 3 ? qsTr("Upload") : view.page === 4 ? qsTr("Write") : ""
         }
@@ -352,6 +361,77 @@ Flickable {
                     }
                 }
             }
+        }
+
+        Repeater {
+            model: view.page === 5 ? view.metrics.gpus.length : 0
+            delegate: FishUI.RoundedRectangle {
+                required property int index
+                readonly property var gpu: view.metrics.gpus[index] || ({})
+                Layout.fillWidth: true
+                implicitHeight: gpuDetails.implicitHeight + 32
+                radius: FishUI.Theme.bigRadius
+                color: FishUI.Theme.secondBackgroundColor
+                ColumnLayout {
+                    id: gpuDetails
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.margins: 16
+                    spacing: 4
+                    FishUI.Label {
+                        Layout.fillWidth: true
+                        text: gpu.name || ""
+                        textFormat: Text.PlainText
+                        font.weight: Font.Medium
+                        font.pointSize: 10
+                        elide: Text.ElideRight
+                    }
+                    DetailRow {
+                        Layout.fillWidth: true
+                        label: qsTr("Driver")
+                        value: gpu.driver || "—"
+                    }
+                    DetailRow {
+                        Layout.fillWidth: true
+                        label: qsTr("State")
+                        value: gpu.active ? qsTr("Active") : qsTr("Powered off")
+                    }
+                    DetailRow {
+                        Layout.fillWidth: true
+                        label: qsTr("Activity")
+                        value: Monitor.formatPercent(gpu.busy || 0)
+                        visible: !!gpu.hasBusy
+                    }
+                    DetailRow {
+                        Layout.fillWidth: true
+                        label: qsTr("Temperature")
+                        value: gpu.active && gpu.temperature >= 0 ? Monitor.formatTemperature(gpu.temperature) : "—"
+                        visible: !!gpu.hasTemperature
+                    }
+                    DetailRow {
+                        Layout.fillWidth: true
+                        label: qsTr("Clock speed")
+                        value: gpu.active ? qsTr("%1 MHz").arg(Math.round(gpu.frequency || 0)) : "—"
+                        visible: !!gpu.hasFrequency
+                    }
+                    DetailRow {
+                        Layout.fillWidth: true
+                        label: qsTr("Video memory")
+                        value: gpu.active ? Monitor.formatBytes(gpu.vramUsed) + " / " + Monitor.formatBytes(gpu.vramTotal) : "—"
+                        visible: !!gpu.hasVram
+                    }
+                }
+            }
+        }
+
+        FishUI.Label {
+            Layout.fillWidth: true
+            text: qsTr("Only measurements that the graphics driver reports are shown. A powered-off GPU is not woken to read them.")
+            font.pointSize: 9
+            wrapMode: Text.Wrap
+            color: FishUI.Theme.disabledTextColor
+            visible: view.page === 5
         }
 
         FishUI.Label {

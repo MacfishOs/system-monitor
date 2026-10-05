@@ -1,7 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Reion Wong <reionwong@gmail.com>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "applicationregistry.h"
 #include "cutefishapplication.h"
+#include "desktopentry.h"
 #include "historygraph.h"
 #include "monitor.h"
 
@@ -13,6 +15,7 @@
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QPainter>
+#include <QProcess>
 #include <QtTest>
 
 static QStringList layoutWarnings;
@@ -39,6 +42,7 @@ private slots:
     void resourcePages();
     void keyboardAndSelection();
     void desktopContextMenu();
+    void applicationView();
     void timestampedGraph();
     void measuredAlignment();
 };
@@ -83,7 +87,7 @@ void UiTest::resourcePages()
 
     for (const QSize &size : { QSize(1040, 700), QSize(840, 600) }) {
         window->resize(size);
-        for (int page = 0; page <= 4; ++page) {
+        for (int page = 0; page <= 5; ++page) {
             QVERIFY(window->setProperty("currentPage", page));
             QSignalSpy samples(&monitor, &Monitor::updated);
             QTRY_VERIFY_WITH_TIMEOUT(samples.count() > 0, 1500);
@@ -130,6 +134,8 @@ void UiTest::keyboardAndSelection()
     window->requestActivate();
     QTest::qWait(50);
 
+    auto scope = window->findChild<QQuickItem *>(QStringLiteral("processScope"));
+    QVERIFY(scope && scope->setProperty("currentIndex", 1));
     auto search = window->findChild<QQuickItem *>(QStringLiteral("processSearch"));
     QVERIFY(search);
     QTest::keyClick(window, Qt::Key_F, Qt::ControlModifier);
@@ -173,10 +179,12 @@ void UiTest::desktopContextMenu()
     QTRY_VERIFY_WITH_TIMEOUT(monitor.ready(), 5000);
     QVERIFY(QTest::qWaitForWindowExposed(window));
 
+    auto scope = window->findChild<QQuickItem *>(QStringLiteral("processScope"));
     auto search = window->findChild<QQuickItem *>(QStringLiteral("processSearch"));
     auto list = window->findChild<QQuickItem *>(QStringLiteral("processList"));
     auto menu = window->findChild<QQuickWindow *>(QStringLiteral("processContextMenu"));
-    QVERIFY(search && list && menu);
+    QVERIFY(scope && search && list && menu);
+    QVERIFY(scope->setProperty("currentIndex", 1));
     search->setProperty("text", QString::number(QCoreApplication::applicationPid()));
     QTRY_VERIFY(monitor.processes()->count() > 0);
     QTest::qWait(50);
@@ -190,6 +198,66 @@ void UiTest::desktopContextMenu()
     QTRY_COMPARE(copies.count(), 1);
     QCOMPARE(copies.first().first().toString(), QString::number(QCoreApplication::applicationPid()));
     QTRY_VERIFY(!menu->isVisible());
+}
+
+void UiTest::applicationView()
+{
+    auto registry = ApplicationRegistry::instance();
+    QTRY_VERIFY_WITH_TIMEOUT(!registry->loading(), 5000);
+    const QString program = QCoreApplication::applicationFilePath();
+    DesktopEntryData entry;
+    entry.id = QFileInfo(program).fileName();
+    entry.type = QStringLiteral("Application");
+    entry.name = QStringLiteral("Fixture Application");
+    entry.exec = program;
+    registry->applyScan({ entry });
+    QProcess helper;
+    helper.start(QStringLiteral("/bin/sh"), { QStringLiteral("-c"), QStringLiteral("read line") });
+    QVERIFY(helper.waitForStarted());
+
+    Monitor monitor;
+    QQmlApplicationEngine engine;
+    engine.rootContext()->setContextProperty(QStringLiteral("Monitor"), &monitor);
+    QSignalSpy warnings(&engine, &QQmlEngine::warnings);
+    engine.load(QUrl(QStringLiteral("qrc:/qml/Main.qml")));
+    QVERIFY(!engine.rootObjects().isEmpty());
+    auto window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
+    QTRY_VERIFY_WITH_TIMEOUT(monitor.ready(), 5000);
+    QVERIFY(QTest::qWaitForWindowExposed(window));
+
+    auto search = window->findChild<QQuickItem *>(QStringLiteral("processSearch"));
+    auto list = window->findChild<QQuickItem *>(QStringLiteral("processList"));
+    auto menu = window->findChild<QQuickWindow *>(QStringLiteral("processContextMenu"));
+    auto endButton = window->findChild<QQuickItem *>(QStringLiteral("endProcessButton"));
+    QVERIFY(search && list && menu && endButton);
+    QCOMPARE(endButton->property("text").toString(), QStringLiteral("Quit Application"));
+    search->setProperty("text", QStringLiteral("Fixture Application"));
+    QTRY_COMPARE_WITH_TIMEOUT(monitor.applications()->count(), 1, 5000);
+    QTest::qWait(50);
+    QTest::mouseClick(window, Qt::RightButton, Qt::NoModifier, list->mapToScene(QPointF(80, 20)).toPoint());
+    QTRY_VERIFY(menu->isVisible());
+    QCOMPARE(window->property("selectedPid").toLongLong(), QCoreApplication::applicationPid());
+    QVERIFY(window->property("selectedApplication").toBool());
+    QVERIFY(QMetaObject::invokeMethod(menu, "close"));
+
+    // The monitor's own application is never offered for quitting.
+    QVERIFY(!window->property("selectedProcess").toMap().value(QStringLiteral("canManage")).toBool());
+    QVERIFY(!endButton->isEnabled());
+    QMetaObject::invokeMethod(window, "openDetails");
+    auto details = window->findChild<QQuickWindow *>(QStringLiteral("processDetailsWindow"));
+    QVERIFY(details);
+    QTRY_VERIFY(details->isVisible());
+    QCOMPARE(details->property("title").toString(), QStringLiteral("Application Details"));
+    auto members = details->findChild<QQuickItem *>(QStringLiteral("applicationProcesses"));
+    QVERIFY(members);
+    QTRY_COMPARE(members->property("count").toInt(), 2);
+    details->close();
+    QCOMPARE(warnings.count(), 0);
+
+    helper.closeWriteChannel();
+    QVERIFY(helper.waitForFinished(3000));
+    registry->startScan();
+    QTRY_VERIFY_WITH_TIMEOUT(!registry->loading(), 5000);
 }
 
 void UiTest::timestampedGraph()
@@ -277,10 +345,14 @@ void UiTest::measuredAlignment()
             << "Sidebar interval bottom inset:" << intervalInset
             << "Process action right inset:" << actionRightInset
             << "Process list height:" << list->height();
+    QTRY_VERIFY_WITH_TIMEOUT(monitor.ready(), 5000);
     for (const QString &name : { QStringLiteral("cpuSummary"), QStringLiteral("memorySummary"),
-                               QStringLiteral("networkSummary"), QStringLiteral("diskSummary") }) {
+                               QStringLiteral("networkSummary"), QStringLiteral("diskSummary"),
+                               QStringLiteral("gpuSummary") }) {
         auto summary = window->findChild<QQuickItem *>(name);
         QVERIFY(summary);
+        if (!summary->isVisible())
+            continue;
         QCOMPARE(qRound(summary->mapToScene({}).x()), 12);
         QCOMPARE(qRound(summary->width()), 216);
         QCOMPARE(qRound(summary->height()), 112);

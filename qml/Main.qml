@@ -25,11 +25,13 @@ FishUI.Window {
     property int currentPage: 0
     property int selectedPid: 0
     property string selectedStart: ""
+    property bool selectedApplication: true
     readonly property int sidebarWidth: 240
-    readonly property var pageTitles: [qsTr("Processes"), qsTr("CPU"), qsTr("Memory"), qsTr("Network"), qsTr("Disk")]
+    readonly property var pageTitles: [qsTr("Processes"), qsTr("CPU"), qsTr("Memory"), qsTr("Network"), qsTr("Disk"), qsTr("GPU")]
     readonly property var selectedProcess: {
         Monitor.metrics;
-        return Monitor.process(selectedPid, selectedStart);
+        return selectedApplication ? Monitor.application(selectedPid, selectedStart)
+                                   : Monitor.process(selectedPid, selectedStart);
     }
 
     LayoutMirroring.enabled: Qt.application.layoutDirection === Qt.RightToLeft
@@ -187,6 +189,21 @@ FishUI.Window {
                 selected: rootWindow.currentPage === 4
                 onClicked: rootWindow.currentPage = 4
             }
+
+            ResourceSummary {
+                objectName: "gpuSummary"
+                width: parent.width
+                visible: Monitor.metrics.gpuAvailable
+                title: qsTr("GPU")
+                value: Monitor.metrics.gpuHasBusy ? Monitor.formatPercent(Monitor.metrics.gpuPercent)
+                                                  : Monitor.formatTemperature(Monitor.metrics.gpuTemperature)
+                subtitle: Monitor.metrics.gpuHasBusy && Monitor.metrics.gpuHasTemperature
+                          ? Monitor.formatTemperature(Monitor.metrics.gpuTemperature) : Monitor.metrics.gpuName
+                values: (Monitor.metrics.gpuHasBusy ? Monitor.history.gpuPercent : Monitor.history.gpuTemperature) || []
+                chartColor: FishUI.Theme.pinkColor
+                selected: rootWindow.currentPage === 5
+                onClicked: rootWindow.currentPage = 5
+            }
         }
     }
 
@@ -263,15 +280,22 @@ FishUI.Window {
         blurEnabled: false
         showOnCompleted: false
         property bool force: false
+        property bool application: false
         property int targetPid: 0
         property string targetStart: ""
         property string targetName: ""
-        title: force ? qsTr("Force stop %1?").arg(targetName) : qsTr("End %1?").arg(targetName)
-        text: force ? qsTr("The process will stop immediately. Unsaved work may be lost.") : qsTr("The process will be asked to close. Unsaved work may be lost.")
-        confirmText: force ? qsTr("Force Stop") : qsTr("End Process")
+        title: application ? (force ? qsTr("Force quit %1?").arg(targetName) : qsTr("Quit %1?").arg(targetName))
+                           : (force ? qsTr("Force stop %1?").arg(targetName) : qsTr("End %1?").arg(targetName))
+        text: application ? (force ? qsTr("All of its processes will stop immediately. Unsaved work may be lost.")
+                                   : qsTr("The application will be asked to quit. Unsaved work may be lost."))
+                          : (force ? qsTr("The process will stop immediately. Unsaved work may be lost.")
+                                   : qsTr("The process will be asked to close. Unsaved work may be lost."))
+        confirmText: application ? (force ? qsTr("Force Quit") : qsTr("Quit"))
+                                 : (force ? qsTr("Force Stop") : qsTr("End Process"))
         destructive: true
         onAccepted: {
-            var error = Monitor.endProcess(targetPid, targetStart, force);
+            var error = application ? Monitor.endApplication(targetPid, targetStart, force)
+                                    : Monitor.endProcess(targetPid, targetStart, force);
             if (error.length > 0)
                 rootWindow.showPassiveNotification(error);
         }
@@ -282,6 +306,7 @@ FishUI.Window {
         parentWindow: rootWindow
         pid: rootWindow.selectedPid
         startTicks: rootWindow.selectedStart
+        application: rootWindow.selectedApplication
     }
 
     Shortcut {
@@ -305,6 +330,7 @@ FishUI.Window {
         if (!selectedProcess.canManage)
             return;
         endDialog.force = force;
+        endDialog.application = selectedApplication;
         endDialog.targetPid = selectedPid;
         endDialog.targetStart = selectedStart;
         endDialog.targetName = selectedProcess.name;

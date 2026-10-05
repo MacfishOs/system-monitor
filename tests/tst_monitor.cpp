@@ -81,6 +81,10 @@ private slots:
     void rejectReusedAndProtectedPid();
     void rejectForeignProcess();
     void desktopIdentity();
+    void scopesAndPss();
+    void sampledScopesAndPss();
+    void applicationGroups();
+    void gpuAccounting();
     void firstPublishedSample();
     void intervalPreservesHistory();
 };
@@ -334,6 +338,216 @@ void MonitorTest::desktopIdentity()
     QCOMPARE(self.value(QStringLiteral("icon")).toString(), QStringLiteral("fixture-icon"));
     registry->startScan();
     QTRY_VERIFY_WITH_TIMEOUT(!registry->loading(), 5000);
+}
+
+void MonitorTest::scopesAndPss()
+{
+    QCOMPARE(ProcReader::scopeApplication("0::/user.slice/user-1000.slice/user@1000.service/app.slice/"
+                                          "app-cutefish-cutefish\\x2dterminal-2091752.scope\n"),
+             QStringLiteral("cutefish-terminal"));
+    QCOMPARE(ProcReader::scopeApplication("0::/user.slice/app.slice/app-org.example.Viewer-12.scope"),
+             QStringLiteral("org.example.Viewer"));
+    QCOMPARE(ProcReader::scopeApplication("0::/app.slice/app-gnome-org.example.Editor@3a9f.service"),
+             QStringLiteral("org.example.Editor"));
+    QCOMPARE(ProcReader::scopeApplication("0::/app.slice/app-org.example.Player.service"),
+             QStringLiteral("org.example.Player"));
+    QCOMPARE(ProcReader::scopeApplication("0::/user.slice/user-1000.slice/session-580.scope"), QString());
+    QCOMPARE(ProcReader::scopeApplication("0::/app.slice/xdg-desktop-portal-cutefish.service"), QString());
+    QCOMPARE(ProcReader::scopeApplication("0::/app.slice/app-broken.scope"), QString());
+    QCOMPARE(ProcReader::scopeApplication({}), QString());
+
+    quint64 pss = 0;
+    QVERIFY(ProcReader::parsePss("55d0-7ffd ---p 00000000 00:00 0 [rollup]\nRss: 161924 kB\n"
+                                 "Pss: 99783 kB\nPss_Dirty: 42360 kB\n", &pss));
+    QCOMPARE(pss, quint64(99783) * 1024);
+    QVERIFY(!ProcReader::parsePss("Rss: 10 kB\n", &pss));
+}
+
+void MonitorTest::sampledScopesAndPss()
+{
+    QTemporaryDir directory;
+    const QString proc = directory.path() + QStringLiteral("/proc");
+    QVERIFY(writeFile(proc + QStringLiteral("/stat"), "cpu 100 0 50 850 0 0 0 0\n"));
+    QVERIFY(writeFile(proc + QStringLiteral("/meminfo"), "MemTotal: 1000 kB\nMemAvailable: 600 kB\n"));
+    QVERIFY(writeFile(proc + QStringLiteral("/100/stat"), processStat(100, QStringLiteral("viewer"), 0, 1000)));
+    QVERIFY(writeFile(proc + QStringLiteral("/100/cgroup"), "0::/user.slice/user-1000.slice/session-2.scope\n"));
+    QVERIFY(writeFile(proc + QStringLiteral("/100/smaps_rollup"), "Pss: 300 kB\n"));
+    QVERIFY(writeFile(proc + QStringLiteral("/200/stat"), processStat(200, QStringLiteral("tool"), 0, 1000)));
+    QVERIFY(writeFile(proc + QStringLiteral("/200/smaps_rollup"), "Pss: 50 kB\n"));
+    ProcReader reader(proc, directory.path() + QStringLiteral("/sys"));
+    auto snapshot = reader.sample();
+    QCOMPARE(snapshot.processes.size(), 2);
+    QVERIFY(snapshot.processes[0].scopeId.isEmpty());
+    QVERIFY(!snapshot.processes[0].pssAvailable);
+    QVERIFY(!snapshot.processes[1].pssAvailable);
+
+    // The launcher adopts the process into its scope after the first read.
+    QVERIFY(writeFile(proc + QStringLiteral("/100/cgroup"),
+                      "0::/user.slice/app.slice/app-cutefish-org.example.Viewer-100.scope\n"));
+    snapshot = reader.sample();
+    QCOMPARE(snapshot.processes[0].scopeId, QStringLiteral("org.example.Viewer"));
+    QVERIFY(snapshot.processes[0].pssAvailable);
+    QCOMPARE(snapshot.processes[0].pss, quint64(300 * 1024));
+    QVERIFY(!snapshot.processes[1].pssAvailable);
+
+    // Settled processes keep their scope and, for a few seconds, their PSS;
+    // members named by the caller and their new children are measured.
+    QVERIFY(writeFile(proc + QStringLiteral("/100/cgroup"), "0::/elsewhere.scope\n"));
+    QVERIFY(writeFile(proc + QStringLiteral("/100/smaps_rollup"), "Pss: 400 kB\n"));
+    QByteArray child = processStat(300, QStringLiteral("helper"), 0, 1100);
+    child.replace(" S 42 ", " S 200 ");
+    QVERIFY(writeFile(proc + QStringLiteral("/300/stat"), child));
+    QVERIFY(writeFile(proc + QStringLiteral("/300/smaps_rollup"), "Pss: 20 kB\n"));
+    snapshot = reader.sample({ 200 });
+    QCOMPARE(snapshot.processes.size(), 3);
+    QCOMPARE(snapshot.processes[0].scopeId, QStringLiteral("org.example.Viewer"));
+    QCOMPARE(snapshot.processes[0].pss, quint64(300 * 1024));
+    QCOMPARE(snapshot.processes[1].pss, quint64(50 * 1024));
+    QCOMPARE(snapshot.processes[2].parentPid, 200);
+    QCOMPARE(snapshot.processes[2].pss, quint64(20 * 1024));
+}
+
+void MonitorTest::applicationGroups()
+{
+    auto registry = ApplicationRegistry::instance();
+    QTRY_VERIFY_WITH_TIMEOUT(!registry->loading(), 5000);
+    const QString program = QCoreApplication::applicationFilePath();
+    DesktopEntryData application;
+    application.id = QFileInfo(program).fileName();
+    application.type = QStringLiteral("Application");
+    application.name = QStringLiteral("Fixture Application");
+    application.icon = QStringLiteral("fixture-icon");
+    application.exec = program;
+    DesktopEntryData standalone;
+    standalone.id = QStringLiteral("fixture-standalone");
+    standalone.type = QStringLiteral("Application");
+    standalone.name = QStringLiteral("Fixture Standalone");
+    standalone.exec = QStringLiteral("/usr/bin/sleep");
+    DesktopEntryData hidden;
+    hidden.id = QStringLiteral("fixture-hidden");
+    hidden.type = QStringLiteral("Application");
+    hidden.name = QStringLiteral("Fixture Hidden");
+    hidden.exec = QStringLiteral("/usr/bin/cat");
+    hidden.noDisplay = true;
+    registry->applyScan({ application, standalone, hidden });
+
+    QProcess helper;
+    helper.start(QStringLiteral("/bin/sh"), { QStringLiteral("-c"), QStringLiteral("read line") });
+    QProcess separate;
+    separate.start(QStringLiteral("/usr/bin/sleep"), { QStringLiteral("30") });
+    QProcess handler;
+    handler.start(QStringLiteral("/usr/bin/cat"));
+    QVERIFY(helper.waitForStarted() && separate.waitForStarted() && handler.waitForStarted());
+
+    Monitor monitor;
+    ProcessFilter *applications = monitor.applications();
+    QTRY_VERIFY_WITH_TIMEOUT(applications->indexOf(getpid()) >= 0 && applications->indexOf(separate.processId()) >= 0, 5000);
+
+    // The helper has no entry of its own and the handler only a hidden one,
+    // so both join their parent; the second program has a listed entry and
+    // stays apart even though this process started it.
+    const auto self = applications->get(applications->indexOf(getpid()));
+    QCOMPARE(self.value(QStringLiteral("name")).toString(), QStringLiteral("Fixture Application"));
+    QCOMPARE(self.value(QStringLiteral("icon")).toString(), QStringLiteral("fixture-icon"));
+    QCOMPARE(self.value(QStringLiteral("processCount")).toInt(), 3);
+    QList<int> pids;
+    QStringList names;
+    double memory = 0;
+    for (const QVariant &member : self.value(QStringLiteral("members")).toList()) {
+        pids.append(member.toMap().value(QStringLiteral("pid")).toInt());
+        names.append(member.toMap().value(QStringLiteral("name")).toString());
+        memory += member.toMap().value(QStringLiteral("memory")).toDouble();
+    }
+    QVERIFY(names.contains(QFileInfo(program).fileName()));
+    // Inline shell code names no program; the executable behind /bin/sh does.
+    QVERIFY(names.contains(QFileInfo(QFileInfo(QStringLiteral("/bin/sh")).canonicalFilePath()).fileName()));
+    QVERIFY(names.contains(QStringLiteral("cat")));
+    QList<int> expected { int(getpid()), int(helper.processId()), int(handler.processId()) };
+    std::sort(expected.begin(), expected.end());
+    QCOMPARE(pids, expected);
+    QCOMPARE(self.value(QStringLiteral("memory")).toDouble(), memory);
+    QVERIFY(memory > 0);
+    QVERIFY(!monitor.application(getpid(), self.value(QStringLiteral("startTicks")).toString())
+            .value(QStringLiteral("canManage")).toBool());
+
+    applications->setSearch(QString::number(helper.processId()));
+    QCOMPARE(applications->count(), 1);
+    applications->setSearch({});
+
+    const auto other = applications->get(applications->indexOf(separate.processId()));
+    QCOMPARE(other.value(QStringLiteral("name")).toString(), QStringLiteral("Fixture Standalone"));
+    QCOMPARE(other.value(QStringLiteral("processCount")).toInt(), 1);
+    const QString start = other.value(QStringLiteral("startTicks")).toString();
+    QVERIFY(monitor.application(separate.processId(), start).value(QStringLiteral("canManage")).toBool());
+    QVERIFY(monitor.endApplication(separate.processId(), QStringLiteral("1"), false).length() > 0);
+    QCOMPARE(separate.state(), QProcess::Running);
+    QCOMPARE(monitor.endApplication(separate.processId(), start, false), QString());
+    QVERIFY(separate.waitForFinished(3000));
+
+    helper.closeWriteChannel();
+    handler.closeWriteChannel();
+    QVERIFY(helper.waitForFinished(3000) && handler.waitForFinished(3000));
+    registry->startScan();
+    QTRY_VERIFY_WITH_TIMEOUT(!registry->loading(), 5000);
+}
+
+void MonitorTest::gpuAccounting()
+{
+    QTemporaryDir directory;
+    const QString proc = directory.path() + QStringLiteral("/proc");
+    const QString sys = directory.path() + QStringLiteral("/sys");
+    QVERIFY(writeFile(proc + QStringLiteral("/stat"), "cpu 1 0 1 98 0 0 0 0\n"));
+    QVERIFY(writeFile(proc + QStringLiteral("/meminfo"), "MemTotal: 1000 kB\n"));
+    {
+        ProcReader reader(proc, sys);
+        QVERIFY(!reader.sample().metrics.value(QStringLiteral("gpuAvailable")).toBool());
+    }
+
+    const QString first = sys + QStringLiteral("/class/drm/card0/device");
+    QVERIFY(writeFile(first + QStringLiteral("/gpu_busy_percent"), "37\n"));
+    QVERIFY(writeFile(first + QStringLiteral("/mem_info_vram_used"), "1024\n"));
+    QVERIFY(writeFile(first + QStringLiteral("/mem_info_vram_total"), "4096\n"));
+    QVERIFY(writeFile(first + QStringLiteral("/product_name"), "Fixture Graphics\n"));
+    QVERIFY(writeFile(first + QStringLiteral("/power/runtime_status"), "active\n"));
+    QVERIFY(writeFile(first + QStringLiteral("/hwmon/hwmon4/temp1_input"), "41500\n"));
+    QVERIFY(writeFile(first + QStringLiteral("/hwmon/hwmon4/freq1_input"), "800000000\n"));
+    QVERIFY(QDir().mkpath(sys + QStringLiteral("/bus/pci/drivers/fixturegpu")));
+    QVERIFY(QFile::link(sys + QStringLiteral("/bus/pci/drivers/fixturegpu"), first + QStringLiteral("/driver")));
+    const QString second = sys + QStringLiteral("/class/drm/card1/device");
+    QVERIFY(writeFile(second + QStringLiteral("/boot_vga"), "1\n"));
+    QVERIFY(writeFile(second + QStringLiteral("/power/runtime_status"), "suspended\n"));
+    QVERIFY(writeFile(second + QStringLiteral("/hwmon/hwmon5/temp1_input"), "60000\n"));
+    QVERIFY(QDir().mkpath(sys + QStringLiteral("/class/drm/card0-eDP-1/device/hwmon/hwmon6")));
+    QVERIFY(writeFile(sys + QStringLiteral("/class/drm/card0-eDP-1/device/gpu_busy_percent"), "99\n"));
+    QVERIFY(writeFile(sys + QStringLiteral("/class/drm/card2/device/vendor"), "0x1234\n"));
+
+    ProcReader reader(proc, sys);
+    const auto metrics = reader.sample().metrics;
+    const auto gpus = metrics.value(QStringLiteral("gpus")).toList();
+    QCOMPARE(gpus.size(), 2);
+
+    // The boot display GPU is listed first; it is suspended and is not read.
+    const auto suspended = gpus[0].toMap();
+    QVERIFY(!suspended.value(QStringLiteral("active")).toBool());
+    QVERIFY(suspended.value(QStringLiteral("hasTemperature")).toBool());
+    QCOMPARE(suspended.value(QStringLiteral("temperature")).toDouble(), -1.0);
+    QVERIFY(!suspended.value(QStringLiteral("hasBusy")).toBool());
+
+    const auto active = gpus[1].toMap();
+    QCOMPARE(active.value(QStringLiteral("name")).toString(), QStringLiteral("Fixture Graphics"));
+    QCOMPARE(active.value(QStringLiteral("driver")).toString(), QStringLiteral("fixturegpu"));
+    QCOMPARE(active.value(QStringLiteral("busy")).toInt(), 37);
+    QCOMPARE(active.value(QStringLiteral("temperature")).toDouble(), 41.5);
+    QCOMPARE(active.value(QStringLiteral("frequency")).toDouble(), 800.0);
+    QCOMPARE(active.value(QStringLiteral("vramUsed")).toULongLong(), quint64(1024));
+    QCOMPARE(active.value(QStringLiteral("vramTotal")).toULongLong(), quint64(4096));
+
+    // The overview prefers a GPU with an activity counter.
+    QVERIFY(metrics.value(QStringLiteral("gpuAvailable")).toBool());
+    QVERIFY(metrics.value(QStringLiteral("gpuHasBusy")).toBool());
+    QCOMPARE(metrics.value(QStringLiteral("gpuName")).toString(), QStringLiteral("Fixture Graphics"));
+    QCOMPARE(metrics.value(QStringLiteral("gpuPercent")).toDouble(), 37.0);
+    QCOMPARE(metrics.value(QStringLiteral("gpuTemperature")).toDouble(), 41.5);
 }
 
 void MonitorTest::firstPublishedSample()

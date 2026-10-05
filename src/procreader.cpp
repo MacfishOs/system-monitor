@@ -41,6 +41,7 @@ ProcReader::ProcReader(const QString &procRoot, const QString &sysRoot)
     : m_procRoot(procRoot)
     , m_sysRoot(sysRoot)
 {
+    m_uid = getuid();
     const long pageSize = sysconf(_SC_PAGESIZE);
     if (pageSize > 0)
         m_pageSize = pageSize;
@@ -196,6 +197,63 @@ QString ProcReader::applicationProgram(const QByteArray &commandLine)
     return program;
 }
 
+QString ProcReader::scopeApplication(const QByteArray &cgroup)
+{
+    QByteArray path;
+    for (const QByteArray &line : cgroup.split('\n')) {
+        if (line.startsWith("0::"))
+            path = line.mid(3);
+    }
+
+    // Launchers name units app[-<launcher>]-<id>-<random>.scope or
+    // app[-<launcher>]-<id>[@<random>].service, with '-' in the id escaped.
+    const QByteArray unit = path.mid(path.lastIndexOf('/') + 1);
+    if (!unit.startsWith("app-"))
+        return {};
+    QByteArray id;
+    if (unit.endsWith(".scope")) {
+        const QList<QByteArray> parts = unit.chopped(6).split('-');
+        if (parts.size() < 3)
+            return {};
+        id = parts.at(parts.size() - 2);
+    } else if (unit.endsWith(".service")) {
+        const QList<QByteArray> parts = unit.chopped(8).split('-');
+        if (parts.size() < 2)
+            return {};
+        id = parts.last();
+        const int instance = id.indexOf('@');
+        if (instance >= 0)
+            id.truncate(instance);
+    } else {
+        return {};
+    }
+
+    QByteArray unescaped;
+    for (int i = 0; i < id.size(); ++i) {
+        bool valid = false;
+        const int value = id.mid(i + 2, 2).toInt(&valid, 16);
+        if (id.at(i) == '\\' && i + 3 < id.size() && id.at(i + 1) == 'x' && valid) {
+            unescaped.append(char(value));
+            i += 3;
+        } else {
+            unescaped.append(id.at(i));
+        }
+    }
+    return QString::fromUtf8(unescaped);
+}
+
+bool ProcReader::parsePss(const QByteArray &rollup, quint64 *pss)
+{
+    for (const QByteArray &line : rollup.split('\n')) {
+        if (!line.startsWith("Pss:"))
+            continue;
+        bool valid = false;
+        *pss = fields(line).value(1).toULongLong(&valid) * 1024;
+        return valid;
+    }
+    return false;
+}
+
 void ProcReader::readIdentity(const QString &path, ProcessRecord *process) const
 {
     process->executable = QFileInfo(path + QStringLiteral("/exe")).symLinkTarget();
@@ -237,6 +295,133 @@ QVariantList ProcReader::volumes()
     return volumes;
 }
 
+void ProcReader::scanGpus()
+{
+    m_gpusScanned = true;
+    static const QRegularExpression card(QStringLiteral("^card[0-9]+$"));
+    const QDir drm(m_sysRoot + QStringLiteral("/class/drm"));
+    for (const QString &entry : drm.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name)) {
+        if (!card.match(entry).hasMatch())
+            continue;
+
+        Gpu gpu;
+        gpu.device = drm.filePath(entry) + QStringLiteral("/device");
+        const QDir hwmon(gpu.device + QStringLiteral("/hwmon"));
+        const QStringList monitors = hwmon.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+        if (!monitors.isEmpty())
+            gpu.hwmon = hwmon.filePath(monitors.first());
+        gpu.hasBusy = QFileInfo::exists(gpu.device + QStringLiteral("/gpu_busy_percent"));
+        gpu.hasTemperature = !gpu.hwmon.isEmpty() && QFileInfo::exists(gpu.hwmon + QStringLiteral("/temp1_input"));
+        gpu.hasFrequency = !gpu.hwmon.isEmpty() && QFileInfo::exists(gpu.hwmon + QStringLiteral("/freq1_input"));
+        gpu.hasVram = QFileInfo::exists(gpu.device + QStringLiteral("/mem_info_vram_total"));
+        if (!gpu.hasBusy && !gpu.hasTemperature)
+            continue;
+
+        gpu.primary = read(gpu.device + QStringLiteral("/boot_vga")).trimmed() == "1";
+        gpu.driver = QFileInfo(QFileInfo(gpu.device + QStringLiteral("/driver")).symLinkTarget()).fileName();
+        gpu.name = QString::fromUtf8(read(gpu.device + QStringLiteral("/product_name")).trimmed());
+        if (gpu.name.isEmpty())
+            gpu.name = pciName(read(gpu.device + QStringLiteral("/vendor")).trimmed(),
+                               read(gpu.device + QStringLiteral("/device")).trimmed());
+        if (gpu.name.isEmpty())
+            gpu.name = gpu.driver.isEmpty() ? entry : gpu.driver;
+        m_gpus.append(gpu);
+    }
+    std::stable_sort(m_gpus.begin(), m_gpus.end(), [](const Gpu &left, const Gpu &right) {
+        return left.primary && !right.primary;
+    });
+}
+
+QString ProcReader::pciName(const QByteArray &vendor, const QByteArray &device) const
+{
+    const QByteArray vendorId = vendor.startsWith("0x") ? vendor.mid(2).toLower() : vendor.toLower();
+    const QByteArray deviceId = device.startsWith("0x") ? device.mid(2).toLower() : device.toLower();
+    if (vendorId.size() != 4 || deviceId.size() != 4)
+        return {};
+
+    for (const QString &path : { QStringLiteral("/usr/share/misc/pci.ids"), QStringLiteral("/usr/share/hwdata/pci.ids") }) {
+        const QByteArray ids = read(path);
+        if (ids.isEmpty())
+            continue;
+        bool inVendor = false;
+        for (const QByteArray &line : ids.split('\n')) {
+            if (line.isEmpty() || line.startsWith('#'))
+                continue;
+            if (line.at(0) != '\t') {
+                if (inVendor)
+                    return {};
+                inVendor = line.startsWith(vendorId + "  ");
+            } else if (inVendor && line.startsWith("\t" + deviceId + "  ")) {
+                return QString::fromUtf8(line.mid(7).trimmed());
+            }
+        }
+        return {};
+    }
+    return {};
+}
+
+void ProcReader::sampleGpus(QVariantMap *metrics)
+{
+    if (!m_gpusScanned)
+        scanGpus();
+
+    QVariantList gpus;
+    for (const Gpu &gpu : std::as_const(m_gpus)) {
+        // Reading a runtime-suspended GPU's counters would wake it up.
+        const bool active = read(gpu.device + QStringLiteral("/power/runtime_status")).trimmed() != "suspended";
+        bool valid = false;
+        int busy = 0;
+        double temperature = -1;
+        double frequency = 0;
+        quint64 vramUsed = 0;
+        quint64 vramTotal = 0;
+        if (active && gpu.hasBusy)
+            busy = qBound(0, read(gpu.device + QStringLiteral("/gpu_busy_percent")).trimmed().toInt(), 100);
+        if (active && gpu.hasTemperature) {
+            const qint64 value = read(gpu.hwmon + QStringLiteral("/temp1_input")).trimmed().toLongLong(&valid);
+            if (valid)
+                temperature = value / 1000.0;
+        }
+        if (active && gpu.hasFrequency)
+            frequency = read(gpu.hwmon + QStringLiteral("/freq1_input")).trimmed().toULongLong() / 1e6;
+        if (active && gpu.hasVram) {
+            vramUsed = read(gpu.device + QStringLiteral("/mem_info_vram_used")).trimmed().toULongLong();
+            vramTotal = read(gpu.device + QStringLiteral("/mem_info_vram_total")).trimmed().toULongLong();
+        }
+        gpus.append(QVariantMap {
+            { QStringLiteral("name"), gpu.name },
+            { QStringLiteral("driver"), gpu.driver },
+            { QStringLiteral("active"), active },
+            { QStringLiteral("hasBusy"), gpu.hasBusy },
+            { QStringLiteral("busy"), busy },
+            { QStringLiteral("hasTemperature"), gpu.hasTemperature },
+            { QStringLiteral("temperature"), temperature },
+            { QStringLiteral("hasFrequency"), gpu.hasFrequency },
+            { QStringLiteral("frequency"), frequency },
+            { QStringLiteral("hasVram"), gpu.hasVram },
+            { QStringLiteral("vramUsed"), vramUsed },
+            { QStringLiteral("vramTotal"), vramTotal }
+        });
+    }
+
+    // The overview follows the primary GPU, or the first one with an activity counter.
+    QVariantMap main = gpus.value(0).toMap();
+    for (const QVariant &gpu : std::as_const(gpus)) {
+        if (gpu.toMap().value(QStringLiteral("hasBusy")).toBool()) {
+            if (!main.value(QStringLiteral("hasBusy")).toBool())
+                main = gpu.toMap();
+            break;
+        }
+    }
+    metrics->insert(QStringLiteral("gpus"), gpus);
+    metrics->insert(QStringLiteral("gpuAvailable"), !gpus.isEmpty());
+    metrics->insert(QStringLiteral("gpuName"), main.value(QStringLiteral("name")).toString());
+    metrics->insert(QStringLiteral("gpuHasBusy"), main.value(QStringLiteral("hasBusy")).toBool());
+    metrics->insert(QStringLiteral("gpuHasTemperature"), main.value(QStringLiteral("hasTemperature")).toBool());
+    metrics->insert(QStringLiteral("gpuPercent"), main.value(QStringLiteral("busy")).toDouble());
+    metrics->insert(QStringLiteral("gpuTemperature"), qMax(0.0, main.value(QStringLiteral("temperature")).toDouble()));
+}
+
 QString ProcReader::userName(uint uid)
 {
     if (!m_users.contains(uid)) {
@@ -250,7 +435,7 @@ QString ProcReader::userName(uint uid)
     return m_users.value(uid);
 }
 
-Snapshot ProcReader::sample()
+Snapshot ProcReader::sample(const QSet<int> &applicationPids)
 {
     Snapshot snapshot;
     const QByteArray stat = read(m_procRoot + QStringLiteral("/stat"));
@@ -330,6 +515,15 @@ Snapshot ProcReader::sample()
             process.command = previous.command;
             process.displayName = previous.displayName;
             process.iconName = previous.iconName;
+            process.scopeId = previous.scopeId;
+            process.pss = previous.pss;
+            process.pssTime = previous.pssTime;
+            process.pssAvailable = previous.pssAvailable;
+            // The launcher moves a new process into its scope after starting
+            // it, so the first read can predate that; the second one settles.
+            process.scopeSettled = true;
+            if (!previous.scopeSettled && process.uid == m_uid && !process.kernelThread)
+                process.scopeId = scopeApplication(read(path + QStringLiteral("/cgroup")));
             if (totalDelta > 0)
                 process.cpu = qMin(100.0, 100.0 * counterDelta(process.cpuTicks, previous.cpuTicks) / totalDelta);
             if (previous.ioAvailable && process.ioAvailable) {
@@ -338,6 +532,8 @@ Snapshot ProcReader::sample()
             }
         } else {
             readIdentity(path, &process);
+            if (process.uid == m_uid && !process.kernelThread)
+                process.scopeId = scopeApplication(read(path + QStringLiteral("/cgroup")));
             ProcessRecord verified;
             if (!parseProcess(read(path + QStringLiteral("/stat")), &verified, m_pageSize)
                     || verified.startTicks != process.startTicks)
@@ -350,6 +546,29 @@ Snapshot ProcReader::sample()
         return left.pid < right.pid;
     });
     snapshot.metrics.insert(QStringLiteral("processCount"), snapshot.processes.size());
+
+    // Shared pages count once across an application's processes through PSS.
+    // The kernel walks every page table to report it, so it is refreshed
+    // every few seconds rather than on every sample.
+    QSet<int> measured = applicationPids;
+    for (ProcessRecord &process : snapshot.processes) {
+        const bool member = process.uid == m_uid && !process.kernelThread
+                && (measured.contains(process.pid) || measured.contains(process.parentPid) || !process.scopeId.isEmpty());
+        if (!member) {
+            process.pssAvailable = false;
+            continue;
+        }
+        measured.insert(process.pid);
+        if (process.pssAvailable && now - process.pssTime < 5'000'000'000)
+            continue;
+        process.pssAvailable = parsePss(read(m_procRoot + QLatin1Char('/') + QString::number(process.pid)
+                                             + QStringLiteral("/smaps_rollup")), &process.pss);
+        process.pssTime = now;
+        ProcessRecord &retained = processes[process.pid];
+        retained.pss = process.pss;
+        retained.pssTime = process.pssTime;
+        retained.pssAvailable = process.pssAvailable;
+    }
 
     QHash<QString, QPair<quint64, quint64>> networks;
     QVariantList interfaces;
@@ -426,6 +645,7 @@ Snapshot ProcReader::sample()
     snapshot.metrics.insert(QStringLiteral("diskRead"), diskRead);
     snapshot.metrics.insert(QStringLiteral("diskWrite"), diskWrite);
     snapshot.metrics.insert(QStringLiteral("disks"), diskDevices);
+    sampleGpus(&snapshot.metrics);
 
     m_previousCpu = cpus;
     m_previousProcesses = processes;

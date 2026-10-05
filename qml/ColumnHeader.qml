@@ -11,7 +11,7 @@ AbstractButton {
     property bool numeric: true
     height: 30
     hoverEnabled: true
-    onClicked: Monitor.processes.sortBy(column)
+    onClicked: Monitor.sortBy(column)
     Accessible.name: qsTr("Sort by %1").arg(text)
 
     background: FishUI.RoundedRectangle {

@@ -10,6 +10,8 @@ Item {
     id: page
     required property var window
     readonly property bool editingSearch: search.activeFocus
+    readonly property bool applicationsMode: scope.currentIndex === 0
+    readonly property var model: applicationsMode ? Monitor.applications : Monitor.processes
     readonly property int cpuWidth: 72
     readonly property int memoryWidth: 88
     readonly property int ioWidth: 88
@@ -28,12 +30,17 @@ Item {
             spacing: 16
 
             FishUI.SegmentedControl {
+                id: scope
                 objectName: "processScope"
-                Layout.preferredWidth: 238
+                Layout.preferredWidth: 357
                 Layout.preferredHeight: 36
                 onCurrentIndexChanged: {
-                    Monitor.processes.allUsers = currentIndex === 1
+                    Monitor.processes.allUsers = currentIndex === 2
                     page.clearSelection()
+                }
+                FishUI.TabButton {
+                    text: qsTr("Applications")
+                    font.pointSize: 9
                 }
                 FishUI.TabButton {
                     text: qsTr("My Processes")
@@ -58,6 +65,7 @@ Item {
                 font.pointSize: 9
                 onTextChanged: {
                     Monitor.processes.search = text
+                    Monitor.applications.search = text
                     page.clearSelection()
                 }
                 Accessible.name: qsTr("Search processes")
@@ -190,7 +198,7 @@ Item {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     clip: true
-                    model: Monitor.processes
+                    model: page.model
                     boundsBehavior: Flickable.StopAtBounds
                     currentIndex: -1
                     keyNavigationEnabled: true
@@ -221,6 +229,7 @@ Item {
                         padding: 0
                         hoverEnabled: false
                         highlighted: page.window.selectedPid === pid && page.window.selectedStart === startTicks
+                                     && page.window.selectedApplication === page.applicationsMode
                         onClicked: {
                             list.currentIndex = index;
                             page.select(index);
@@ -313,12 +322,12 @@ Item {
                     }
 
                     Keys.onUpPressed: {
-                        currentIndex = Math.max(0, Monitor.processes.indexOf(page.window.selectedPid) - 1);
+                        currentIndex = Math.max(0, page.model.indexOf(page.window.selectedPid) - 1);
                         page.select(currentIndex);
                         positionViewAtIndex(currentIndex, ListView.Contain);
                     }
                     Keys.onDownPressed: {
-                        currentIndex = Math.min(count - 1, Monitor.processes.indexOf(page.window.selectedPid) + 1);
+                        currentIndex = Math.min(count - 1, page.model.indexOf(page.window.selectedPid) + 1);
                         page.select(currentIndex);
                         positionViewAtIndex(currentIndex, ListView.Contain);
                     }
@@ -331,10 +340,11 @@ Item {
                 anchors.centerIn: parent
                 width: parent.width - 64
                 spacing: 8
-                visible: Monitor.processes.count === 0
+                visible: page.model.count === 0
                 FishUI.Label {
                     width: parent.width
-                    text: Monitor.ready ? qsTr("No processes found") : qsTr("Collecting system information…")
+                    text: !Monitor.ready ? qsTr("Collecting system information…")
+                                         : page.applicationsMode ? qsTr("No applications found") : qsTr("No processes found")
                     font.weight: Font.Medium
                     horizontalAlignment: Text.AlignHCenter
                 }
@@ -351,7 +361,7 @@ Item {
         FishUI.ConfirmDialogButton {
             objectName: "endProcessButton"
             Layout.alignment: Qt.AlignRight
-            text: qsTr("End Process")
+            text: page.applicationsMode ? qsTr("Quit Application") : qsTr("End Process")
             enabled: !!page.window.selectedProcess.canManage
             onClicked: page.window.confirmEnd(false)
         }
@@ -372,19 +382,20 @@ Item {
         }
         FishUI.MenuSeparator {}
         FishUI.MenuItem {
-            text: qsTr("End Process")
+            text: page.applicationsMode ? qsTr("Quit") : qsTr("End Process")
             enabled: !!page.window.selectedProcess.canManage
             onTriggered: page.window.confirmEnd(false)
         }
         FishUI.MenuItem {
-            text: qsTr("Force Stop")
+            text: page.applicationsMode ? qsTr("Force Quit") : qsTr("Force Stop")
             enabled: !!page.window.selectedProcess.canManage
             onTriggered: page.window.confirmEnd(true)
         }
     }
 
     function select(index) {
-        var process = Monitor.processes.get(index);
+        var process = page.model.get(index);
+        page.window.selectedApplication = page.applicationsMode;
         page.window.selectedPid = process.pid || 0;
         page.window.selectedStart = process.startTicks || "";
     }
@@ -392,6 +403,7 @@ Item {
     function clearSelection() {
         page.window.selectedPid = 0
         page.window.selectedStart = ""
+        page.window.selectedApplication = page.applicationsMode
     }
 
     function focusSearch() {
