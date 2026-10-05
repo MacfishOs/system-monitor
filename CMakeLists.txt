@@ -17,6 +17,10 @@ find_package(Qt6 REQUIRED COMPONENTS Core Gui Quick QuickControls2 DBus Concurre
 find_package(CutefishFramework REQUIRED COMPONENTS Application)
 
 add_library(monitor-backend STATIC
+    src/diskreader.cpp
+    src/gpureader.cpp
+    src/fileutil.cpp
+    src/networkreader.cpp
     src/procreader.cpp
     src/processmodel.cpp
     src/monitor.cpp

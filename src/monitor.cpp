@@ -93,7 +93,7 @@ void Monitor::sample()
 {
     // A hung network mount blocks statfs; it must not stall the other measurements.
     if (!m_volumeWatcher.isRunning())
-        m_volumeWatcher.setFuture(QtConcurrent::run(&ProcReader::volumes));
+        m_volumeWatcher.setFuture(QtConcurrent::run(&DiskReader::volumes));
 
     if (m_watcher.isRunning())
         return;

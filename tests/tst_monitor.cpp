@@ -85,6 +85,7 @@ private slots:
     void sampledScopesAndPss();
     void applicationGroups();
     void gpuAccounting();
+    void drmClientAccounting();
     void firstPublishedSample();
     void intervalPreservesHistory();
 };
@@ -548,6 +549,90 @@ void MonitorTest::gpuAccounting()
     QCOMPARE(metrics.value(QStringLiteral("gpuName")).toString(), QStringLiteral("Fixture Graphics"));
     QCOMPARE(metrics.value(QStringLiteral("gpuPercent")).toDouble(), 37.0);
     QCOMPARE(metrics.value(QStringLiteral("gpuTemperature")).toDouble(), 41.5);
+}
+
+void MonitorTest::drmClientAccounting()
+{
+    const DrmClient render = GpuReader::parseDrmFdinfo("pos:\t0\ndrm-driver:\ti915\ndrm-client-id:\t12\n"
+                                                       "drm-engine-render:\t1000 ns\ndrm-engine-video:\t400 ns\n"
+                                                       "drm-engine-capacity-video:\t2\n");
+    QCOMPARE(render.id, QByteArray("12"));
+    QCOMPARE(render.engines.size(), 2);
+    QCOMPARE(render.engines.value("render").busyTime, quint64(1000));
+    QCOMPARE(render.engines.value("video").capacity, 2);
+    const DrmClient cycles = GpuReader::parseDrmFdinfo("drm-client-id:\t3\ndrm-cycles-rcs:\t50\n"
+                                                       "drm-total-cycles-rcs:\t200\n");
+    QVERIFY(cycles.engines.value("rcs").hasCycles);
+    QCOMPARE(cycles.engines.value("rcs").totalCycles, quint64(200));
+    QVERIFY(GpuReader::parseDrmFdinfo("pos:\t0\nflags:\t02100002\n").engines.isEmpty());
+
+    // Clients add up per engine; the busiest engine, over its capacity, is the activity.
+    auto client = [](const QByteArray &id, quint64 render, quint64 video) {
+        DrmClient result;
+        result.id = id;
+        result.engines["render"] = { render, 0, 0, 1, true, false };
+        result.engines["video"] = { video, 0, 0, 2, true, false };
+        return result;
+    };
+    const QHash<QByteArray, DrmClient> before { { "1", client("1", 0, 0) }, { "2", client("2", 0, 0) } };
+    const QHash<QByteArray, DrmClient> after { { "1", client("1", 200, 900) }, { "2", client("2", 100, 900) },
+                                              { "3", client("3", 1000, 0) } };
+    QCOMPARE(GpuReader::drmBusy(after, before, 1000), 90.0);
+    QCOMPARE(GpuReader::drmBusy(after, {}, 1000), 0.0);
+    QCOMPARE(GpuReader::drmBusy({ { "1", client("1", 5000, 0) } }, before, 1000), 100.0);
+
+    QTemporaryDir directory;
+    const QString proc = directory.path() + QStringLiteral("/proc");
+    const QString sys = directory.path() + QStringLiteral("/sys");
+    QVERIFY(writeFile(proc + QStringLiteral("/stat"), "cpu 1 0 1 98 0 0 0 0\n"));
+    QVERIFY(writeFile(proc + QStringLiteral("/meminfo"), "MemTotal: 1000 kB\n"));
+    QVERIFY(writeFile(proc + QStringLiteral("/200/stat"), processStat(200, QStringLiteral("client"), 0, 1000)));
+    QVERIFY(QDir().mkpath(proc + QStringLiteral("/200/fd")));
+    QVERIFY(QFile::link(QStringLiteral("/dev/dri/renderD130"), proc + QStringLiteral("/200/fd/7")));
+    QVERIFY(QFile::link(QStringLiteral("/dev/dri/renderD130"), proc + QStringLiteral("/200/fd/8")));
+    QVERIFY(QFile::link(QStringLiteral("/dev/null"), proc + QStringLiteral("/200/fd/9")));
+    const QString device = sys + QStringLiteral("/class/drm/card3/device");
+    QVERIFY(QDir().mkpath(device + QStringLiteral("/drm/card3")));
+    QVERIFY(QDir().mkpath(device + QStringLiteral("/drm/renderD130")));
+    QVERIFY(writeFile(device + QStringLiteral("/product_name"), "Client Graphics\n"));
+
+    // A card without a counter or a temperature stays hidden until a client reports busyness.
+    QVERIFY(writeFile(proc + QStringLiteral("/200/fdinfo/7"), "pos:\t0\n"));
+    QVERIFY(writeFile(proc + QStringLiteral("/200/fdinfo/8"), "pos:\t0\n"));
+    ProcReader reader(proc, sys);
+    QVERIFY(!reader.sample().metrics.value(QStringLiteral("gpuAvailable")).toBool());
+
+    // A descriptor duplicated by the client counts once.
+    const QByteArray first = "drm-client-id:\t5\ndrm-cycles-rcs:\t100\ndrm-total-cycles-rcs:\t1000\n";
+    QVERIFY(writeFile(proc + QStringLiteral("/200/fdinfo/7"), first));
+    QVERIFY(writeFile(proc + QStringLiteral("/200/fdinfo/8"), first));
+    auto metrics = reader.sample().metrics;
+    QVERIFY(metrics.value(QStringLiteral("gpuHasBusy")).toBool());
+    QCOMPARE(metrics.value(QStringLiteral("gpuName")).toString(), QStringLiteral("Client Graphics"));
+    QCOMPARE(metrics.value(QStringLiteral("gpuPercent")).toDouble(), 0.0);
+
+    const QByteArray second = "drm-client-id:\t5\ndrm-cycles-rcs:\t400\ndrm-total-cycles-rcs:\t2000\n";
+    QVERIFY(writeFile(proc + QStringLiteral("/200/fdinfo/7"), second));
+    QVERIFY(writeFile(proc + QStringLiteral("/200/fdinfo/8"), second));
+    metrics = reader.sample().metrics;
+    QCOMPARE(metrics.value(QStringLiteral("gpuPercent")).toDouble(), 30.0);
+
+    // A descriptor a running process opens later is found within five samples.
+    QVERIFY(QFile::link(QStringLiteral("/dev/dri/renderD130"), proc + QStringLiteral("/200/fd/10")));
+    double busy = 0;
+    for (int sample = 1; sample <= 7 && busy == 0; ++sample) {
+        QVERIFY(writeFile(proc + QStringLiteral("/200/fdinfo/10"),
+                          "drm-client-id:\t6\ndrm-cycles-rcs:\t" + QByteArray::number(sample * 500)
+                          + "\ndrm-total-cycles-rcs:\t" + QByteArray::number(sample * 1000) + "\n"));
+        busy = reader.sample().metrics.value(QStringLiteral("gpuPercent")).toDouble();
+    }
+    QCOMPARE(busy, 50.0);
+
+    // A suspended card's clients are not read.
+    QVERIFY(writeFile(device + QStringLiteral("/power/runtime_status"), "suspended\n"));
+    metrics = reader.sample().metrics;
+    QVERIFY(metrics.value(QStringLiteral("gpuHasBusy")).toBool());
+    QCOMPARE(metrics.value(QStringLiteral("gpuPercent")).toDouble(), 0.0);
 }
 
 void MonitorTest::firstPublishedSample()
