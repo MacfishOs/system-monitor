@@ -1,0 +1,15 @@
+<!-- SPDX-FileCopyrightText: 2026 Reion Wong <reionwong@gmail.com> -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+
+<RCC>
+    <qresource prefix="/qml">
+        <file alias="Main.qml">qml/Main.qml</file>
+        <file alias="ResourceSummary.qml">qml/ResourceSummary.qml</file>
+        <file alias="ProcessesPage.qml">qml/ProcessesPage.qml</file>
+        <file alias="ColumnHeader.qml">qml/ColumnHeader.qml</file>
+        <file alias="ResourcePage.qml">qml/ResourcePage.qml</file>
+        <file alias="ChartCard.qml">qml/ChartCard.qml</file>
+        <file alias="DetailRow.qml">qml/DetailRow.qml</file>
+        <file alias="ProcessDetails.qml">qml/ProcessDetails.qml</file>
+    </qresource>
+</RCC>
