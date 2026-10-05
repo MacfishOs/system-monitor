@@ -10,14 +10,8 @@ AbstractButton {
     property string column
     property bool numeric: true
     height: 30
-    hoverEnabled: true
     onClicked: Monitor.sortBy(column)
     Accessible.name: qsTr("Sort by %1").arg(text)
-
-    background: FishUI.RoundedRectangle {
-        radius: 6
-        color: control.hovered ? Qt.alpha(FishUI.Theme.textColor, 0.04) : "transparent"
-    }
 
     contentItem: Item {
         FishUI.Label {
@@ -31,7 +25,8 @@ AbstractButton {
         }
 
         FishUI.Icon {
-            x: control.numeric ? label.x - 16 : label.x + label.width + 6
+            // Numeric titles stay flush with their values; the indicator sits in the cell's 12 px margin.
+            x: label.x + label.width + 3
             anchors.verticalCenter: parent.verticalCenter
             width: 10
             height: 10
