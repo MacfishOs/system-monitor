@@ -62,6 +62,7 @@ Flickable {
         }
 
         FishUI.Label {
+            leftPadding: 16
             text: qsTr("Logical processors")
             font.weight: Font.Medium
             font.pointSize: 9
@@ -111,86 +112,54 @@ Flickable {
             }
         }
 
-        FishUI.RoundedRectangle {
-            Layout.fillWidth: true
-            implicitHeight: memoryDetails.implicitHeight + 32
-            radius: FishUI.Theme.bigRadius
-            color: FishUI.Theme.secondBackgroundColor
+        ListCard {
             visible: view.page === 2
 
-            ColumnLayout {
-                id: memoryDetails
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.top: parent.top
-                anchors.margins: 16
-                spacing: 4
-                DetailRow {
-                    Layout.fillWidth: true
-                    label: qsTr("In use")
-                    value: Monitor.formatBytes(view.metrics.memoryUsed)
-                }
-                DetailRow {
-                    Layout.fillWidth: true
-                    label: qsTr("Available")
-                    value: Monitor.formatBytes(view.metrics.memoryAvailable)
-                }
-                DetailRow {
-                    Layout.fillWidth: true
-                    label: qsTr("Cached")
-                    value: Monitor.formatBytes(view.metrics.memoryCache)
-                }
-                DetailRow {
-                    Layout.fillWidth: true
-                    label: qsTr("Total memory")
-                    value: Monitor.formatBytes(view.metrics.memoryTotal)
-                }
-                DetailRow {
-                    Layout.fillWidth: true
-                    label: qsTr("Swap")
-                    value: view.metrics.swapTotal > 0 ? Monitor.formatBytes(view.metrics.swapUsed) + " / " + Monitor.formatBytes(view.metrics.swapTotal) : qsTr("Not configured")
-                }
+            InfoRow {
+                text: qsTr("In use")
+                value: Monitor.formatBytes(view.metrics.memoryUsed)
+            }
+            InfoRow {
+                text: qsTr("Available")
+                value: Monitor.formatBytes(view.metrics.memoryAvailable)
+            }
+            InfoRow {
+                text: qsTr("Cached")
+                value: Monitor.formatBytes(view.metrics.memoryCache)
+            }
+            InfoRow {
+                text: qsTr("Total memory")
+                value: Monitor.formatBytes(view.metrics.memoryTotal)
+            }
+            InfoRow {
+                text: qsTr("Swap")
+                value: view.metrics.swapTotal > 0 ? Monitor.formatBytes(view.metrics.swapUsed) + " / " + Monitor.formatBytes(view.metrics.swapTotal) : qsTr("Not configured")
             }
         }
 
-        FishUI.RoundedRectangle {
-            Layout.fillWidth: true
-            implicitHeight: networkDetails.implicitHeight + 32
-            radius: FishUI.Theme.bigRadius
-            color: FishUI.Theme.secondBackgroundColor
+        ListCard {
             visible: view.page === 3
 
-            ColumnLayout {
-                id: networkDetails
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.top: parent.top
-                anchors.margins: 16
-                spacing: 4
-                DetailRow {
-                    Layout.fillWidth: true
-                    label: qsTr("Download")
-                    value: Monitor.formatRate(view.metrics.download)
-                }
-                DetailRow {
-                    Layout.fillWidth: true
-                    label: qsTr("Upload")
-                    value: Monitor.formatRate(view.metrics.upload)
-                }
-                DetailRow {
-                    Layout.fillWidth: true
-                    label: qsTr("Total received")
-                    value: Monitor.formatBytes(view.metrics.received)
-                }
-                DetailRow {
-                    Layout.fillWidth: true
-                    label: qsTr("Total sent")
-                    value: Monitor.formatBytes(view.metrics.sent)
-                }
+            InfoRow {
+                text: qsTr("Download")
+                value: Monitor.formatRate(view.metrics.download)
+            }
+            InfoRow {
+                text: qsTr("Upload")
+                value: Monitor.formatRate(view.metrics.upload)
+            }
+            InfoRow {
+                text: qsTr("Total received")
+                value: Monitor.formatBytes(view.metrics.received)
+            }
+            InfoRow {
+                text: qsTr("Total sent")
+                value: Monitor.formatBytes(view.metrics.sent)
             }
         }
 
         FishUI.Label {
+            leftPadding: 16
             text: qsTr("Network interfaces")
             font.weight: Font.Medium
             font.pointSize: 9
@@ -199,44 +168,30 @@ Flickable {
 
         Repeater {
             model: view.page === 3 ? view.metrics.interfaces.length : 0
-            delegate: FishUI.RoundedRectangle {
+            delegate: ColumnLayout {
                 required property int index
                 readonly property var adapter: view.metrics.interfaces[index] || ({})
                 Layout.fillWidth: true
-                implicitHeight: interfaceDetails.implicitHeight + 32
-                radius: FishUI.Theme.bigRadius
-                color: FishUI.Theme.secondBackgroundColor
-                ColumnLayout {
-                    id: interfaceDetails
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.top: parent.top
-                    anchors.margins: 16
-                    spacing: 4
-                    FishUI.Label {
-                        text: adapter.name || ""
-                        textFormat: Text.PlainText
-                        font.weight: Font.Medium
-                        font.pointSize: 10
-                    }
-                    DetailRow {
-                        Layout.fillWidth: true
-                        label: qsTr("State")
+                spacing: 8
+
+                SectionLabel {
+                    text: adapter.name || ""
+                }
+                ListCard {
+                    InfoRow {
+                        text: qsTr("State")
                         value: adapter.state === "up" ? qsTr("Connected") : adapter.state === "down" ? qsTr("Disconnected") : qsTr("Unknown")
                     }
-                    DetailRow {
-                        Layout.fillWidth: true
-                        label: qsTr("Download")
+                    InfoRow {
+                        text: qsTr("Download")
                         value: Monitor.formatRate(adapter.download)
                     }
-                    DetailRow {
-                        Layout.fillWidth: true
-                        label: qsTr("Upload")
+                    InfoRow {
+                        text: qsTr("Upload")
                         value: Monitor.formatRate(adapter.upload)
                     }
-                    DetailRow {
-                        Layout.fillWidth: true
-                        label: qsTr("Hardware address")
+                    InfoRow {
+                        text: qsTr("Hardware address")
                         value: adapter.address || "—"
                     }
                 }
@@ -245,46 +200,30 @@ Flickable {
 
         Repeater {
             model: view.page === 4 ? view.metrics.disks.length : 0
-            delegate: FishUI.RoundedRectangle {
+            delegate: ColumnLayout {
                 required property int index
                 readonly property var disk: view.metrics.disks[index] || ({})
                 Layout.fillWidth: true
-                implicitHeight: diskDetails.implicitHeight + 32
-                radius: FishUI.Theme.bigRadius
-                color: FishUI.Theme.secondBackgroundColor
-                ColumnLayout {
-                    id: diskDetails
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.top: parent.top
-                    anchors.margins: 16
-                    spacing: 4
-                    FishUI.Label {
-                        Layout.fillWidth: true
-                        text: disk.model || disk.name || ""
-                        textFormat: Text.PlainText
-                        font.weight: Font.Medium
-                        font.pointSize: 10
-                        elide: Text.ElideRight
-                    }
-                    DetailRow {
-                        Layout.fillWidth: true
-                        label: qsTr("Device")
+                spacing: 8
+
+                SectionLabel {
+                    text: disk.model || disk.name || ""
+                }
+                ListCard {
+                    InfoRow {
+                        text: qsTr("Device")
                         value: "/dev/" + (disk.name || "")
                     }
-                    DetailRow {
-                        Layout.fillWidth: true
-                        label: qsTr("Capacity")
+                    InfoRow {
+                        text: qsTr("Capacity")
                         value: Monitor.formatBytes(disk.size)
                     }
-                    DetailRow {
-                        Layout.fillWidth: true
-                        label: qsTr("Read")
+                    InfoRow {
+                        text: qsTr("Read")
                         value: Monitor.formatRate(disk.read)
                     }
-                    DetailRow {
-                        Layout.fillWidth: true
-                        label: qsTr("Write")
+                    InfoRow {
+                        text: qsTr("Write")
                         value: Monitor.formatRate(disk.write)
                     }
                 }
@@ -292,6 +231,7 @@ Flickable {
         }
 
         FishUI.Label {
+            leftPadding: 16
             text: qsTr("Storage")
             font.weight: Font.Medium
             font.pointSize: 9
@@ -300,46 +240,44 @@ Flickable {
 
         Repeater {
             model: view.page === 4 ? view.metrics.volumes.length : 0
-            delegate: FishUI.RoundedRectangle {
+            delegate: ColumnLayout {
                 required property int index
                 readonly property var volume: view.metrics.volumes[index] || ({})
                 Layout.fillWidth: true
-                implicitHeight: volumeDetails.implicitHeight + 32
-                radius: FishUI.Theme.bigRadius
-                color: FishUI.Theme.secondBackgroundColor
-                ColumnLayout {
-                    id: volumeDetails
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.top: parent.top
-                    anchors.margins: 16
-                    spacing: 12
-                    RowLayout {
+                spacing: 8
+
+                SectionLabel {
+                    text: volume.mount || ""
+                    elide: Text.ElideMiddle
+                }
+                ListCard {
+                    Item {
                         Layout.fillWidth: true
-                        FishUI.Label {
-                            Layout.fillWidth: true
-                            text: volume.mount || ""
-                            textFormat: Text.PlainText
-                            font.pointSize: 10
-                            font.weight: Font.Medium
-                            elide: Text.ElideMiddle
-                        }
-                        FishUI.Label {
-                            text: qsTr("%1 available").arg(Monitor.formatBytes(volume.available))
-                            font.pointSize: 9
-                            color: FishUI.Theme.disabledTextColor
+                        implicitHeight: 16 + usage.implicitHeight
+
+                        FishUI.ProgressBar {
+                            id: usage
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.bottom: parent.bottom
+                            anchors.leftMargin: 16
+                            anchors.rightMargin: 16
+                            from: 0
+                            to: volume.total || 0
+                            value: volume.used || 0
                         }
                     }
-                    FishUI.ProgressBar {
-                        Layout.fillWidth: true
-                        from: 0
-                        to: volume.total || 0
-                        value: volume.used || 0
+                    InfoRow {
+                        text: qsTr("Used")
+                        value: qsTr("%1 of %2").arg(Monitor.formatBytes(volume.used)).arg(Monitor.formatBytes(volume.total))
                     }
-                    DetailRow {
-                        Layout.fillWidth: true
-                        label: volume.type || ""
-                        value: qsTr("%1 of %2 used").arg(Monitor.formatBytes(volume.used)).arg(Monitor.formatBytes(volume.total))
+                    InfoRow {
+                        text: qsTr("Available")
+                        value: Monitor.formatBytes(volume.available)
+                    }
+                    InfoRow {
+                        text: qsTr("File system")
+                        value: volume.type || "—"
                     }
                 }
             }
@@ -347,59 +285,41 @@ Flickable {
 
         Repeater {
             model: view.page === 5 ? view.metrics.gpus.length : 0
-            delegate: FishUI.RoundedRectangle {
+            delegate: ColumnLayout {
                 required property int index
                 readonly property var gpu: view.metrics.gpus[index] || ({})
                 Layout.fillWidth: true
-                implicitHeight: gpuDetails.implicitHeight + 32
-                radius: FishUI.Theme.bigRadius
-                color: FishUI.Theme.secondBackgroundColor
-                ColumnLayout {
-                    id: gpuDetails
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.top: parent.top
-                    anchors.margins: 16
-                    spacing: 4
-                    FishUI.Label {
-                        Layout.fillWidth: true
-                        text: gpu.name || ""
-                        textFormat: Text.PlainText
-                        font.weight: Font.Medium
-                        font.pointSize: 10
-                        elide: Text.ElideRight
-                    }
-                    DetailRow {
-                        Layout.fillWidth: true
-                        label: qsTr("Driver")
+                spacing: 8
+
+                SectionLabel {
+                    text: gpu.name || ""
+                }
+                ListCard {
+                    InfoRow {
+                        text: qsTr("Driver")
                         value: gpu.driver || "—"
                     }
-                    DetailRow {
-                        Layout.fillWidth: true
-                        label: qsTr("State")
+                    InfoRow {
+                        text: qsTr("State")
                         value: gpu.active ? qsTr("Active") : qsTr("Powered off")
                     }
-                    DetailRow {
-                        Layout.fillWidth: true
-                        label: qsTr("Activity")
+                    InfoRow {
+                        text: qsTr("Activity")
                         value: Monitor.formatPercent(gpu.busy || 0)
                         visible: !!gpu.hasBusy
                     }
-                    DetailRow {
-                        Layout.fillWidth: true
-                        label: qsTr("Temperature")
+                    InfoRow {
+                        text: qsTr("Temperature")
                         value: gpu.active && gpu.temperature >= 0 ? Monitor.formatTemperature(gpu.temperature) : "—"
                         visible: !!gpu.hasTemperature
                     }
-                    DetailRow {
-                        Layout.fillWidth: true
-                        label: qsTr("Clock speed")
+                    InfoRow {
+                        text: qsTr("Clock speed")
                         value: gpu.active ? qsTr("%1 MHz").arg(Math.round(gpu.frequency || 0)) : "—"
                         visible: !!gpu.hasFrequency
                     }
-                    DetailRow {
-                        Layout.fillWidth: true
-                        label: qsTr("Video memory")
+                    InfoRow {
+                        text: qsTr("Video memory")
                         value: gpu.active ? Monitor.formatBytes(gpu.vramUsed) + " / " + Monitor.formatBytes(gpu.vramTotal) : "—"
                         visible: !!gpu.hasVram
                     }
