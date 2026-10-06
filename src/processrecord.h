@@ -26,6 +26,8 @@ struct ProcessRecord
     int nice = 0;
     quint64 startTicks = 0;
     quint64 cpuTicks = 0;
+    quint64 rss = 0;
+    // PSS when it could be read, resident memory otherwise.
     quint64 memory = 0;
     quint64 readBytes = 0;
     quint64 writeBytes = 0;

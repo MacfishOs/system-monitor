@@ -118,7 +118,8 @@ bool ProcReader::parseProcess(const QByteArray &contents, ProcessRecord *process
     process->nice = values[16].toInt();
     process->threads = values[17].toInt();
     process->startTicks = values[19].toULongLong(&validStart);
-    process->memory = qMax<qint64>(0, values[21].toLongLong()) * pageSize;
+    process->rss = qMax<qint64>(0, values[21].toLongLong()) * pageSize;
+    process->memory = process->rss;
     return validPid && validStart && process->pid > 0;
 }
 
@@ -264,7 +265,7 @@ QString ProcReader::userName(uint uid)
     return m_users.value(uid);
 }
 
-Snapshot ProcReader::sample(const QSet<int> &applicationPids)
+Snapshot ProcReader::sample()
 {
     Snapshot snapshot;
     const QByteArray stat = readFile(m_procRoot + QStringLiteral("/stat"));
@@ -376,27 +377,25 @@ Snapshot ProcReader::sample(const QSet<int> &applicationPids)
     });
     snapshot.metrics.insert(QStringLiteral("processCount"), snapshot.processes.size());
 
-    // Shared pages count once across an application's processes through PSS.
-    // The kernel walks every page table to report it, so it is refreshed
-    // every few seconds rather than on every sample.
-    QSet<int> measured = applicationPids;
+    // PSS counts shared pages once across processes. Only the user's own
+    // processes can be read, and the kernel walks every page table to report
+    // it, so it is refreshed every few seconds rather than on every sample.
     for (ProcessRecord &process : snapshot.processes) {
-        const bool member = process.uid == m_uid && !process.kernelThread
-                && (measured.contains(process.pid) || measured.contains(process.parentPid) || !process.scopeId.isEmpty());
-        if (!member) {
+        if (process.uid != m_uid || process.kernelThread) {
             process.pssAvailable = false;
             continue;
         }
-        measured.insert(process.pid);
-        if (process.pssAvailable && now - process.pssTime < 5'000'000'000)
-            continue;
-        process.pssAvailable = parsePss(readFile(m_procRoot + QLatin1Char('/') + QString::number(process.pid)
-                                             + QStringLiteral("/smaps_rollup")), &process.pss);
-        process.pssTime = now;
-        ProcessRecord &retained = processes[process.pid];
-        retained.pss = process.pss;
-        retained.pssTime = process.pssTime;
-        retained.pssAvailable = process.pssAvailable;
+        if (!process.pssAvailable || now - process.pssTime >= 5'000'000'000) {
+            process.pssAvailable = parsePss(readFile(m_procRoot + QLatin1Char('/') + QString::number(process.pid)
+                                                 + QStringLiteral("/smaps_rollup")), &process.pss);
+            process.pssTime = now;
+            ProcessRecord &retained = processes[process.pid];
+            retained.pss = process.pss;
+            retained.pssTime = process.pssTime;
+            retained.pssAvailable = process.pssAvailable;
+        }
+        if (process.pssAvailable)
+            process.memory = process.pss;
     }
 
     m_networks.sample(&snapshot.metrics, elapsed);

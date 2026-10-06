@@ -142,7 +142,7 @@ QVariantMap ProcessModel::describe(const ProcessRecord &process)
             { QStringLiteral("pid"), member.pid },
             { QStringLiteral("name"), programName(member) },
             { QStringLiteral("cpu"), member.cpu },
-            { QStringLiteral("memory"), member.pssAvailable ? member.pss : member.memory }
+            { QStringLiteral("memory"), member.memory }
         });
     }
     result.insert(QStringLiteral("application"), true);

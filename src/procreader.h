@@ -36,9 +36,7 @@ public:
     explicit ProcReader(const QString &procRoot = QStringLiteral("/proc"),
                         const QString &sysRoot = QStringLiteral("/sys"));
 
-    // PSS is read for the processes of applicationPids, their new children
-    // and processes in application cgroups: it is too costly for all of them.
-    Snapshot sample(const QSet<int> &applicationPids = {});
+    Snapshot sample();
     static CpuCounters parseCpu(const QByteArray &line);
     static QVariantMap parseMemory(const QByteArray &contents);
     static bool parseProcess(const QByteArray &contents, ProcessRecord *process,

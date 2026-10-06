@@ -135,7 +135,8 @@ void MonitorTest::processNamesAndFields()
     QCOMPARE(process.name, QStringLiteral("worker (pool) 3"));
     QCOMPARE(process.cpuTicks, quint64(25));
     QCOMPARE(process.startTicks, quint64(999));
-    QCOMPARE(process.memory, quint64(7 * 4096));
+    QCOMPARE(process.rss, quint64(7 * 4096));
+    QCOMPARE(process.memory, process.rss);
     QCOMPARE(process.threads, 3);
     QCOMPARE(process.nice, 5);
     QVERIFY(!process.kernelThread);
@@ -384,37 +385,42 @@ void MonitorTest::sampledScopesAndPss()
     QVERIFY(writeFile(proc + QStringLiteral("/100/smaps_rollup"), "Pss: 300 kB\n"));
     QVERIFY(writeFile(proc + QStringLiteral("/200/stat"), processStat(200, QStringLiteral("tool"), 0, 1000)));
     QVERIFY(writeFile(proc + QStringLiteral("/200/smaps_rollup"), "Pss: 50 kB\n"));
+    QVERIFY(writeFile(proc + QStringLiteral("/400/stat"), processStat(400, QStringLiteral("locked"), 0, 1000)));
     ProcReader reader(proc, directory.path() + QStringLiteral("/sys"));
     auto snapshot = reader.sample();
-    QCOMPARE(snapshot.processes.size(), 2);
+    QCOMPARE(snapshot.processes.size(), 3);
     QVERIFY(snapshot.processes[0].scopeId.isEmpty());
-    QVERIFY(!snapshot.processes[0].pssAvailable);
-    QVERIFY(!snapshot.processes[1].pssAvailable);
+
+    // Every process of the user is measured; an unreadable one keeps its resident memory.
+    QVERIFY(snapshot.processes[0].pssAvailable);
+    QCOMPARE(snapshot.processes[0].memory, quint64(300 * 1024));
+    QVERIFY(snapshot.processes[1].pssAvailable);
+    QCOMPARE(snapshot.processes[1].memory, quint64(50 * 1024));
+    QVERIFY(!snapshot.processes[2].pssAvailable);
+    QVERIFY(snapshot.processes[2].rss > 0);
+    QCOMPARE(snapshot.processes[2].memory, snapshot.processes[2].rss);
 
     // The launcher adopts the process into its scope after the first read.
     QVERIFY(writeFile(proc + QStringLiteral("/100/cgroup"),
                       "0::/user.slice/app.slice/app-cutefish-org.example.Viewer-100.scope\n"));
     snapshot = reader.sample();
     QCOMPARE(snapshot.processes[0].scopeId, QStringLiteral("org.example.Viewer"));
-    QVERIFY(snapshot.processes[0].pssAvailable);
-    QCOMPARE(snapshot.processes[0].pss, quint64(300 * 1024));
-    QVERIFY(!snapshot.processes[1].pssAvailable);
 
     // Settled processes keep their scope and, for a few seconds, their PSS;
-    // members named by the caller and their new children are measured.
+    // new processes are measured at once.
     QVERIFY(writeFile(proc + QStringLiteral("/100/cgroup"), "0::/elsewhere.scope\n"));
     QVERIFY(writeFile(proc + QStringLiteral("/100/smaps_rollup"), "Pss: 400 kB\n"));
     QByteArray child = processStat(300, QStringLiteral("helper"), 0, 1100);
     child.replace(" S 42 ", " S 200 ");
     QVERIFY(writeFile(proc + QStringLiteral("/300/stat"), child));
     QVERIFY(writeFile(proc + QStringLiteral("/300/smaps_rollup"), "Pss: 20 kB\n"));
-    snapshot = reader.sample({ 200 });
-    QCOMPARE(snapshot.processes.size(), 3);
+    snapshot = reader.sample();
+    QCOMPARE(snapshot.processes.size(), 4);
     QCOMPARE(snapshot.processes[0].scopeId, QStringLiteral("org.example.Viewer"));
-    QCOMPARE(snapshot.processes[0].pss, quint64(300 * 1024));
-    QCOMPARE(snapshot.processes[1].pss, quint64(50 * 1024));
+    QCOMPARE(snapshot.processes[0].memory, quint64(300 * 1024));
+    QCOMPARE(snapshot.processes[1].memory, quint64(50 * 1024));
     QCOMPARE(snapshot.processes[2].parentPid, 200);
-    QCOMPARE(snapshot.processes[2].pss, quint64(20 * 1024));
+    QCOMPARE(snapshot.processes[2].memory, quint64(20 * 1024));
 }
 
 void MonitorTest::applicationGroups()

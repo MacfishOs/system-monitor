@@ -110,9 +110,8 @@ void Monitor::sample()
     if (m_watcher.isRunning())
         return;
     const auto reader = m_reader;
-    const QSet<int> applicationPids = m_applicationPids;
-    m_watcher.setFuture(QtConcurrent::run([reader, applicationPids] {
-        return reader->sample(applicationPids);
+    m_watcher.setFuture(QtConcurrent::run([reader] {
+        return reader->sample();
     }));
 }
 
@@ -228,7 +227,6 @@ QVector<ProcessRecord> Monitor::groupApplications(const QVector<ProcessRecord> &
     }
 
     QVector<ProcessRecord> applications;
-    m_applicationPids.clear();
     for (const QString &id : std::as_const(order)) {
         const QVector<int> &indexes = groups[id];
         QSet<int> pids;
@@ -264,12 +262,10 @@ QVector<ProcessRecord> Monitor::groupApplications(const QVector<ProcessRecord> &
         group.writeRate = 0;
         group.threads = 0;
         group.ioAvailable = false;
-        group.pssAvailable = true;
         for (const int index : indexes) {
             const ProcessRecord &process = processes[index];
             group.cpu += process.cpu;
-            group.memory += process.pssAvailable ? process.pss : process.memory;
-            group.pssAvailable = group.pssAvailable && process.pssAvailable;
+            group.memory += process.memory;
             group.threads += process.threads;
             if (process.ioAvailable) {
                 group.ioAvailable = true;
@@ -277,7 +273,6 @@ QVector<ProcessRecord> Monitor::groupApplications(const QVector<ProcessRecord> &
                 group.writeRate += process.writeRate;
             }
             group.members.push_back(process);
-            m_applicationPids.insert(process.pid);
         }
         group.cpu = qMin(100.0, group.cpu);
         applications.append(group);

@@ -88,7 +88,6 @@ private:
     ProcessModel m_applicationModel;
     ProcessFilter m_applicationFilter;
     int m_scope = 1;
-    QSet<int> m_applicationPids;
     QHash<QString, Application> m_applicationIds;
     std::shared_ptr<ProcReader> m_reader;
     QFutureWatcher<Snapshot> m_watcher;
