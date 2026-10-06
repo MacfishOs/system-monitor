@@ -13,6 +13,7 @@
         <file alias="ProcessDetails.qml">qml/ProcessDetails.qml</file>
     </qresource>
     <qresource prefix="/icons">
+        <file alias="processes.svg">icons/processes.svg</file>
         <file alias="cpu.svg">icons/cpu.svg</file>
         <file alias="memory.svg">icons/memory.svg</file>
         <file alias="network.svg">icons/network.svg</file>

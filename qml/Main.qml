@@ -146,13 +146,12 @@ FishUI.Window {
                 rightPadding: 12
                 contentItem: RowLayout {
                     spacing: 8
-                    FishUI.Icon {
+                    FishUI.IconItem {
                         Layout.alignment: Qt.AlignTop
-                        // The list artwork's ink centre is half a pixel above its box centre.
-                        Layout.topMargin: processesLabel.capCenter - height / 2 + 0.5
+                        Layout.topMargin: processesLabel.capCenter - height / 2
                         Layout.preferredWidth: 16
                         Layout.preferredHeight: 16
-                        name: "list"
+                        source: "qrc:/icons/processes.svg"
                         color: processesButton.highlighted ? FishUI.Theme.highlightColor : FishUI.Theme.textColor
                     }
                     // Capitals centred in the row, not the line box.
