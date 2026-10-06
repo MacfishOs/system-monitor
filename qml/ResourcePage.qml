@@ -153,15 +153,6 @@ Flickable {
             }
         }
 
-        FishUI.Label {
-            Layout.fillWidth: true
-            text: qsTr("Available memory includes caches the system can reclaim when applications need it.")
-            font.pointSize: 9
-            wrapMode: Text.Wrap
-            color: FishUI.Theme.disabledTextColor
-            visible: view.page === 2
-        }
-
         FishUI.RoundedRectangle {
             Layout.fillWidth: true
             implicitHeight: networkDetails.implicitHeight + 32
@@ -250,15 +241,6 @@ Flickable {
                     }
                 }
             }
-        }
-
-        FishUI.Label {
-            Layout.fillWidth: true
-            text: qsTr("The overview counts physical interfaces once. Virtual interfaces are listed separately.")
-            font.pointSize: 9
-            wrapMode: Text.Wrap
-            color: FishUI.Theme.disabledTextColor
-            visible: view.page === 3
         }
 
         Repeater {
@@ -423,24 +405,6 @@ Flickable {
                     }
                 }
             }
-        }
-
-        FishUI.Label {
-            Layout.fillWidth: true
-            text: qsTr("Only measurements that the graphics driver reports are shown. A powered-off GPU is not woken to read them.")
-            font.pointSize: 9
-            wrapMode: Text.Wrap
-            color: FishUI.Theme.disabledTextColor
-            visible: view.page === 5
-        }
-
-        FishUI.Label {
-            Layout.fillWidth: true
-            text: qsTr("Process CPU usage is shown as a share of the whole processor.")
-            font.pointSize: 9
-            wrapMode: Text.Wrap
-            color: FishUI.Theme.disabledTextColor
-            visible: view.page === 1
         }
     }
 }
