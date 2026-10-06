@@ -34,8 +34,9 @@ Item {
                 objectName: "processScope"
                 Layout.preferredWidth: 357
                 Layout.preferredHeight: 36
+                currentIndex: Monitor.scope
                 onCurrentIndexChanged: {
-                    Monitor.processes.allUsers = currentIndex === 2
+                    Monitor.scope = currentIndex
                     page.clearSelection()
                 }
                 FishUI.TabButton {

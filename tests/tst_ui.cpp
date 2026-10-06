@@ -6,6 +6,7 @@
 #include "desktopentry.h"
 #include "historygraph.h"
 #include "monitor.h"
+#include "preferences.h"
 
 #include <QCoreApplication>
 #include <QGuiApplication>
@@ -38,6 +39,7 @@ class UiTest : public QObject
 private slots:
     void initTestCase();
     void cleanupTestCase();
+    void init();
     void resourcePages_data();
     void resourcePages();
     void keyboardAndSelection();
@@ -50,11 +52,17 @@ private slots:
 void UiTest::initTestCase()
 {
     previousHandler = qInstallMessageHandler(captureWarnings);
+    QStandardPaths::setTestModeEnabled(true);
 }
 
 void UiTest::cleanupTestCase()
 {
     qInstallMessageHandler(previousHandler);
+}
+
+void UiTest::init()
+{
+    QFile::remove(Preferences::ownFile());
 }
 
 void UiTest::resourcePages_data()
@@ -225,11 +233,15 @@ void UiTest::applicationView()
     QTRY_VERIFY_WITH_TIMEOUT(monitor.ready(), 5000);
     QVERIFY(QTest::qWaitForWindowExposed(window));
 
+    auto scope = window->findChild<QQuickItem *>(QStringLiteral("processScope"));
     auto search = window->findChild<QQuickItem *>(QStringLiteral("processSearch"));
     auto list = window->findChild<QQuickItem *>(QStringLiteral("processList"));
     auto menu = window->findChild<QQuickWindow *>(QStringLiteral("processContextMenu"));
     auto endButton = window->findChild<QQuickItem *>(QStringLiteral("endProcessButton"));
-    QVERIFY(search && list && menu && endButton);
+    QVERIFY(scope && search && list && menu && endButton);
+    QCOMPARE(scope->property("currentIndex").toInt(), 1);
+    QVERIFY(scope->setProperty("currentIndex", 0));
+    QCOMPARE(monitor.scope(), 0);
     QCOMPARE(endButton->property("text").toString(), QStringLiteral("Quit Application"));
     search->setProperty("text", QStringLiteral("Fixture Application"));
     QTRY_COMPARE_WITH_TIMEOUT(monitor.applications()->count(), 1, 5000);

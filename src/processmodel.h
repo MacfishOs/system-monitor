@@ -59,6 +59,7 @@ public:
     bool ascending() const;
     int count() const;
     Q_INVOKABLE void sortBy(const QString &column);
+    void setSorting(const QString &column, bool ascending);
     Q_INVOKABLE QVariantMap get(int row) const;
     Q_INVOKABLE int indexOf(int pid) const;
 

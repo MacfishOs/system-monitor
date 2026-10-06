@@ -199,6 +199,12 @@ void ProcessFilter::setAllUsers(bool allUsers)
 
 void ProcessFilter::sortBy(const QString &column)
 {
+    setSorting(column, m_sortColumn == column ? !m_ascending
+                                              : column == QLatin1String("name") || column == QLatin1String("pid"));
+}
+
+void ProcessFilter::setSorting(const QString &column, bool ascending)
+{
     const QHash<QString, int> columns {
         { QStringLiteral("name"), ProcessModel::NameRole },
         { QStringLiteral("cpu"), ProcessModel::CpuRole },
@@ -209,8 +215,7 @@ void ProcessFilter::sortBy(const QString &column)
     };
     if (!columns.contains(column))
         return;
-    m_ascending = m_sortColumn == column ? !m_ascending
-                                         : column == QLatin1String("name") || column == QLatin1String("pid");
+    m_ascending = ascending;
     m_sortColumn = column;
     setSortRole(columns.value(column));
     sort(0, m_ascending ? Qt::AscendingOrder : Qt::DescendingOrder);

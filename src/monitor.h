@@ -21,6 +21,7 @@ class Monitor : public QObject
     Q_PROPERTY(QVariantMap history READ history NOTIFY updated)
     Q_PROPERTY(ProcessFilter *processes READ processes CONSTANT)
     Q_PROPERTY(ProcessFilter *applications READ applications CONSTANT)
+    Q_PROPERTY(int scope READ scope WRITE setScope NOTIFY scopeChanged)
     Q_PROPERTY(bool ready READ ready NOTIFY updated)
     Q_PROPERTY(QString error READ error NOTIFY updated)
     Q_PROPERTY(int interval READ interval WRITE setInterval NOTIFY intervalChanged)
@@ -34,6 +35,9 @@ public:
     QVariantMap history() const;
     ProcessFilter *processes();
     ProcessFilter *applications();
+    // Index of the process list's segment: applications, own processes, all processes.
+    int scope() const;
+    void setScope(int scope);
     bool ready() const;
     QString error() const;
     int interval() const;
@@ -58,10 +62,12 @@ public slots:
 signals:
     void updated();
     void intervalChanged();
+    void scopeChanged();
     void activationRequested();
     void copyRequested(const QString &text);
 
 private:
+    void savePreferences() const;
     void sample();
     void acceptSample();
     void identify(ProcessRecord *process);
@@ -81,6 +87,7 @@ private:
     ProcessFilter m_filter;
     ProcessModel m_applicationModel;
     ProcessFilter m_applicationFilter;
+    int m_scope = 1;
     QSet<int> m_applicationPids;
     QHash<QString, Application> m_applicationIds;
     std::shared_ptr<ProcReader> m_reader;

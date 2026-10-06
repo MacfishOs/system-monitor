@@ -5,10 +5,12 @@
 
 #include "applicationregistry.h"
 #include "desktopentry.h"
+#include "preferences.h"
 
 #include <QFile>
 #include <QFileInfo>
 #include <QLocale>
+#include <QSettings>
 #include <QtConcurrent>
 
 #include <algorithm>
@@ -43,6 +45,15 @@ Monitor::Monitor(QObject *parent)
         m_metrics.insert(key, false);
     m_metrics.insert(QStringLiteral("cpuName"), QString());
     m_metrics.insert(QStringLiteral("gpuName"), QString());
+    QSettings settings(Preferences::ownFile(), QSettings::IniFormat);
+    settings.beginGroup(QStringLiteral("Processes"));
+    m_scope = qBound(0, settings.value(QStringLiteral("Scope"), m_scope).toInt(), 2);
+    m_filter.setAllUsers(m_scope == 2);
+    const QString column = settings.value(QStringLiteral("SortColumn"), m_filter.sortColumn()).toString();
+    const bool ascending = settings.value(QStringLiteral("SortAscending"), m_filter.ascending()).toBool();
+    m_filter.setSorting(column, ascending);
+    m_applicationFilter.setSorting(column, ascending);
+
     m_historyClock.start();
     m_timer.setInterval(1000);
     connect(&m_timer, &QTimer::timeout, this, &Monitor::sample);
@@ -66,6 +77,7 @@ Monitor::~Monitor()
 QVariantMap Monitor::metrics() const { return m_metrics; }
 ProcessFilter *Monitor::processes() { return &m_filter; }
 ProcessFilter *Monitor::applications() { return &m_applicationFilter; }
+int Monitor::scope() const { return m_scope; }
 bool Monitor::ready() const { return m_ready; }
 QString Monitor::error() const { return m_error; }
 int Monitor::interval() const { return m_timer.interval(); }
@@ -338,10 +350,31 @@ QString Monitor::endApplication(int pid, const QString &startTicks, bool force)
     return {};
 }
 
+void Monitor::setScope(int scope)
+{
+    scope = qBound(0, scope, 2);
+    if (m_scope == scope)
+        return;
+    m_scope = scope;
+    m_filter.setAllUsers(m_scope == 2);
+    savePreferences();
+    emit scopeChanged();
+}
+
 void Monitor::sortBy(const QString &column)
 {
     m_filter.sortBy(column);
     m_applicationFilter.sortBy(column);
+    savePreferences();
+}
+
+void Monitor::savePreferences() const
+{
+    QSettings settings(Preferences::ownFile(), QSettings::IniFormat);
+    settings.beginGroup(QStringLiteral("Processes"));
+    settings.setValue(QStringLiteral("Scope"), m_scope);
+    settings.setValue(QStringLiteral("SortColumn"), m_filter.sortColumn());
+    settings.setValue(QStringLiteral("SortAscending"), m_filter.ascending());
 }
 
 QString Monitor::endProcess(int pid, const QString &startTicks, bool force)

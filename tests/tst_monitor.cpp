@@ -4,6 +4,7 @@
 #include "applicationregistry.h"
 #include "desktopentry.h"
 #include "monitor.h"
+#include "preferences.h"
 #include "procreader.h"
 
 #include <QAbstractItemModelTester>
@@ -68,6 +69,7 @@ class MonitorTest : public QObject
     Q_OBJECT
 
 private slots:
+    void initTestCase();
     void cpuAccounting();
     void memoryAccounting();
     void processNamesAndFields();
@@ -88,7 +90,14 @@ private slots:
     void drmClientAccounting();
     void firstPublishedSample();
     void intervalPreservesHistory();
+    void rememberedScopeAndSorting();
 };
+
+void MonitorTest::initTestCase()
+{
+    QStandardPaths::setTestModeEnabled(true);
+    QFile::remove(Preferences::ownFile());
+}
 
 void MonitorTest::cpuAccounting()
 {
@@ -665,6 +674,30 @@ void MonitorTest::intervalPreservesHistory()
     const auto timestamps = monitor.history().value(QStringLiteral("timestamps")).toList();
     QVERIFY(timestamps.size() >= history.value(QStringLiteral("timestamps")).toList().size());
     QCOMPARE(timestamps.first(), history.value(QStringLiteral("timestamps")).toList().first());
+}
+
+void MonitorTest::rememberedScopeAndSorting()
+{
+    QFile::remove(Preferences::ownFile());
+    {
+        Monitor monitor;
+        QCOMPARE(monitor.scope(), 1);
+        QVERIFY(!monitor.processes()->allUsers());
+        QCOMPARE(monitor.processes()->sortColumn(), QStringLiteral("cpu"));
+        QVERIFY(!monitor.processes()->ascending());
+        monitor.setScope(2);
+        monitor.sortBy(QStringLiteral("memory"));
+        monitor.sortBy(QStringLiteral("memory"));
+    }
+
+    Monitor monitor;
+    QCOMPARE(monitor.scope(), 2);
+    QVERIFY(monitor.processes()->allUsers());
+    for (const ProcessFilter *filter : { monitor.processes(), monitor.applications() }) {
+        QCOMPARE(filter->sortColumn(), QStringLiteral("memory"));
+        QVERIFY(filter->ascending());
+    }
+    QFile::remove(Preferences::ownFile());
 }
 
 QTEST_GUILESS_MAIN(MonitorTest)
