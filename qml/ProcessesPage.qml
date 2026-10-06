@@ -132,6 +132,42 @@ Item {
                     }
                 }
             }
+
+            AbstractButton {
+                id: endButton
+                objectName: "endProcessButton"
+                Layout.preferredHeight: 36
+                leftPadding: 16
+                rightPadding: 16
+                topPadding: 0
+                bottomPadding: 0
+                text: qsTr("Quit")
+                font.pointSize: 9
+                enabled: !!page.window.selectedProcess.canManage
+                hoverEnabled: true
+                focusPolicy: Qt.NoFocus
+                onClicked: page.window.confirmEnd(false)
+                Accessible.name: text
+
+                background: FishUI.RoundedRectangle {
+                    continuousCorners: false
+                    radius: height / 2
+                    // Disabled, it sinks into the page like the scope control's track.
+                    color: !endButton.enabled ? (FishUI.Theme.darkMode ? Qt.rgba(1, 1, 1, 0.05) : Qt.rgba(0, 0, 0, 0.03))
+                           : endButton.down ? Qt.tint(FishUI.Theme.secondBackgroundColor, Qt.alpha(FishUI.Theme.textColor, 0.06))
+                           : endButton.hovered ? Qt.tint(FishUI.Theme.secondBackgroundColor, Qt.alpha(FishUI.Theme.textColor, 0.025))
+                           : FishUI.Theme.secondBackgroundColor
+                }
+
+                contentItem: Text {
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    text: endButton.text
+                    font: endButton.font
+                    color: !endButton.enabled ? FishUI.Theme.disabledTextColor
+                                              : FishUI.Theme.darkMode ? "#ff453a" : "#d92d20"
+                }
+            }
         }
 
         FishUI.RoundedRectangle {
@@ -366,14 +402,6 @@ Item {
                 }
             }
         }
-
-        FishUI.ConfirmDialogButton {
-            objectName: "endProcessButton"
-            Layout.alignment: Qt.AlignRight
-            text: page.applicationsMode ? qsTr("Quit Application") : qsTr("End Process")
-            enabled: !!page.window.selectedProcess.canManage
-            onClicked: page.window.confirmEnd(false)
-        }
     }
 
     FishUI.DesktopMenu {
@@ -391,12 +419,12 @@ Item {
         }
         FishUI.MenuSeparator {}
         FishUI.MenuItem {
-            text: page.applicationsMode ? qsTr("Quit") : qsTr("End Process")
+            text: qsTr("Quit")
             enabled: !!page.window.selectedProcess.canManage
             onTriggered: page.window.confirmEnd(false)
         }
         FishUI.MenuItem {
-            text: page.applicationsMode ? qsTr("Force Quit") : qsTr("Force Stop")
+            text: qsTr("Force Quit")
             enabled: !!page.window.selectedProcess.canManage
             onTriggered: page.window.confirmEnd(true)
         }

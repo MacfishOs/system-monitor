@@ -242,7 +242,7 @@ void UiTest::applicationView()
     QCOMPARE(scope->property("currentIndex").toInt(), 1);
     QVERIFY(scope->setProperty("currentIndex", 0));
     QCOMPARE(monitor.scope(), 0);
-    QCOMPARE(endButton->property("text").toString(), QStringLiteral("Quit Application"));
+    QCOMPARE(endButton->property("text").toString(), QStringLiteral("Quit"));
     search->setProperty("text", QStringLiteral("Fixture Application"));
     QTRY_COMPARE_WITH_TIMEOUT(monitor.applications()->count(), 1, 5000);
     QTest::qWait(50);
@@ -361,11 +361,23 @@ void UiTest::measuredAlignment()
     QCOMPARE(intervalRect.size(), minimizeRect.size());
     QCOMPARE(intervalRect.top(), minimizeRect.top());
     QCOMPARE(minimizeRect.left() - intervalRect.right(), window->property("windowButtonsSpacing").toReal());
-    const qreal actionInset = window->height() - endButton->mapToScene(QPointF(0, endButton->height())).y();
-    const qreal actionRightInset = window->width() - endButton->mapToScene(QPointF(endButton->width(), 0)).x();
-    qInfo() << "Process action bottom inset:" << actionInset
+    auto table = window->findChild<QQuickItem *>(QStringLiteral("processTable"));
+    auto scope = window->findChild<QQuickItem *>(QStringLiteral("processScope"));
+    QVERIFY(table && scope);
+    const QRectF actionRect = endButton->mapRectToScene(endButton->boundingRect());
+    const QRectF tableRect = table->mapRectToScene(table->boundingRect());
+    QCOMPARE(actionRect.height(), search->height());
+    QVERIFY(qAbs(actionRect.center().y() - searchCenter) < 0.01);
+    QCOMPARE(actionRect.right(), tableRect.right());
+    auto actionLabel = endButton->property("contentItem").value<QQuickItem *>();
+    auto scopeLabel = scope->property("currentItem").value<QQuickItem *>();
+    QVERIFY(actionLabel && scopeLabel);
+    const qreal actionBaseline = actionLabel->mapToScene({}).y() + actionLabel->property("baselineOffset").toReal();
+    const qreal scopeBaseline = scopeLabel->mapToScene({}).y() + scopeLabel->property("baselineOffset").toReal();
+    QVERIFY(qAbs(actionBaseline - scopeBaseline) < 0.01);
+    qInfo() << "Process action rect:" << actionRect << "baseline:" << actionBaseline << "scope baseline:" << scopeBaseline
+            << "table rect:" << tableRect
             << "Interval button rect:" << intervalRect << "minimize button rect:" << minimizeRect
-            << "Process action right inset:" << actionRightInset
             << "Process list height:" << list->height();
     QTRY_VERIFY_WITH_TIMEOUT(monitor.ready(), 5000);
     for (const QString &name : { QStringLiteral("cpuSummary"), QStringLiteral("memorySummary"),

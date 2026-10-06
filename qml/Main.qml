@@ -303,14 +303,12 @@ FishUI.Window {
         property int targetPid: 0
         property string targetStart: ""
         property string targetName: ""
-        title: application ? (force ? qsTr("Force quit %1?").arg(targetName) : qsTr("Quit %1?").arg(targetName))
-                           : (force ? qsTr("Force stop %1?").arg(targetName) : qsTr("End %1?").arg(targetName))
+        title: force ? qsTr("Force quit %1?").arg(targetName) : qsTr("Quit %1?").arg(targetName)
         text: application ? (force ? qsTr("All of its processes will stop immediately. Unsaved work may be lost.")
                                    : qsTr("The application will be asked to quit. Unsaved work may be lost."))
                           : (force ? qsTr("The process will stop immediately. Unsaved work may be lost.")
-                                   : qsTr("The process will be asked to close. Unsaved work may be lost."))
-        confirmText: application ? (force ? qsTr("Force Quit") : qsTr("Quit"))
-                                 : (force ? qsTr("Force Stop") : qsTr("End Process"))
+                                   : qsTr("The process will be asked to quit. Unsaved work may be lost."))
+        confirmText: force ? qsTr("Force Quit") : qsTr("Quit")
         destructive: true
         onAccepted: {
             var error = application ? Monitor.endApplication(targetPid, targetStart, force)
