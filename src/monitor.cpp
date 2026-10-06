@@ -156,11 +156,11 @@ void Monitor::acceptSample()
 
 Monitor::Application Monitor::describeEntry(DesktopEntry *entry)
 {
-    if (!entry)
+    // Hidden entries (portals, handlers) are no application, and their names
+    // ("Portal") would disguise the process behind them.
+    if (!entry || entry->noDisplay() || entry->hidden())
         return {};
-    // Hidden entries (Xwayland, handlers) name a process but are no application.
-    const bool listed = !entry->noDisplay() && !entry->hidden();
-    return { listed ? entry->id() : QString(), entry->name(), entry->icon() };
+    return { entry->id(), entry->name(), entry->icon() };
 }
 
 void Monitor::identify(ProcessRecord *process)

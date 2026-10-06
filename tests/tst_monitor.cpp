@@ -440,7 +440,7 @@ void MonitorTest::applicationGroups()
     standalone.name = QStringLiteral("Fixture Standalone");
     standalone.exec = QStringLiteral("/usr/bin/sleep");
     DesktopEntryData hidden;
-    hidden.id = QStringLiteral("fixture-hidden");
+    hidden.id = QStringLiteral("cat");
     hidden.type = QStringLiteral("Application");
     hidden.name = QStringLiteral("Fixture Hidden");
     hidden.exec = QStringLiteral("/usr/bin/cat");
@@ -485,6 +485,13 @@ void MonitorTest::applicationGroups()
     QVERIFY(memory > 0);
     QVERIFY(!monitor.application(getpid(), self.value(QStringLiteral("startTicks")).toString())
             .value(QStringLiteral("canManage")).toBool());
+
+    // A hidden entry claims no name or icon for its process.
+    ProcessFilter *processes = monitor.processes();
+    QTRY_VERIFY_WITH_TIMEOUT(processes->indexOf(handler.processId()) >= 0, 5000);
+    const auto handled = processes->get(processes->indexOf(handler.processId()));
+    QCOMPARE(handled.value(QStringLiteral("name")).toString(), QStringLiteral("cat"));
+    QCOMPARE(handled.value(QStringLiteral("icon")).toString(), QStringLiteral("application-x-executable"));
 
     applications->setSearch(QString::number(helper.processId()));
     QCOMPARE(applications->count(), 1);
