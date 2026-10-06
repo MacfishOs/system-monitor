@@ -35,7 +35,7 @@ FishUI.Window {
     headerItem: Item {
         FishUI.Label {
             anchors.left: parent.left
-            anchors.leftMargin: 20
+            anchors.leftMargin: 16
             anchors.verticalCenter: parent.verticalCenter
             text: dialog.title
             font.pointSize: 10
@@ -44,7 +44,7 @@ FishUI.Window {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 24
+        anchors.margins: 16
         anchors.topMargin: 12
         spacing: 12
 
