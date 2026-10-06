@@ -10,6 +10,7 @@ import Cutefish.SystemMonitor
 AbstractButton {
     id: control
     property string title
+    property string iconName
     property string value
     property string subtitle
     property var values: []
@@ -39,19 +40,25 @@ AbstractButton {
             Layout.fillWidth: true
             spacing: 8
 
-            Rectangle {
-                Layout.preferredWidth: 6
-                Layout.preferredHeight: 6
-                radius: 3
+            FishUI.IconItem {
+                Layout.alignment: Qt.AlignTop
+                Layout.topMargin: titleLabel.capCenter - height / 2
+                Layout.preferredWidth: 16
+                Layout.preferredHeight: 16
+                source: "qrc:/icons/" + control.iconName + ".svg"
                 color: control.chartColor
             }
-            FishUI.Label {
+            // The capitals' top, not the line box, sits on the card's padding.
+            FishUI.AlignedLabel {
+                id: titleLabel
                 Layout.fillWidth: true
+                textBaseline: capHeight
                 text: control.title
                 font.pointSize: 9
                 font.weight: Font.Medium
             }
-            FishUI.Label {
+            FishUI.AlignedLabel {
+                textBaseline: titleLabel.textBaseline
                 text: Monitor.ready ? control.value : "—"
                 font.pointSize: 9
                 font.weight: Font.Medium
@@ -60,6 +67,7 @@ AbstractButton {
 
         FishUI.Label {
             Layout.fillWidth: true
+            Layout.leftMargin: 16 + 8
             text: Monitor.ready ? control.subtitle : qsTr("Collecting data…")
             color: FishUI.Theme.disabledTextColor
             font.pointSize: 8

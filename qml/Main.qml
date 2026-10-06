@@ -140,20 +140,31 @@ FishUI.Window {
                     border.color: Qt.alpha(FishUI.Theme.highlightColor, 0.5)
                 }
 
+                // Icon and title columns line up with the ResourceSummary cards.
+                padding: 0
+                leftPadding: 12
+                rightPadding: 12
                 contentItem: RowLayout {
-                    spacing: 10
+                    spacing: 8
                     FishUI.Icon {
-                        Layout.preferredWidth: 18
-                        Layout.preferredHeight: 18
+                        Layout.alignment: Qt.AlignTop
+                        // The list artwork's ink centre is half a pixel above its box centre.
+                        Layout.topMargin: processesLabel.capCenter - height / 2 + 0.5
+                        Layout.preferredWidth: 16
+                        Layout.preferredHeight: 16
                         name: "list"
                         color: processesButton.highlighted ? FishUI.Theme.highlightColor : FishUI.Theme.textColor
                     }
-                    FishUI.Label {
+                    // Capitals centred in the row, not the line box.
+                    FishUI.AlignedLabel {
+                        id: processesLabel
                         Layout.fillWidth: true
+                        textBaseline: (processesButton.height + capHeight) / 2
                         text: qsTr("Processes")
                         font.weight: Font.Medium
                     }
-                    FishUI.Label {
+                    FishUI.AlignedLabel {
+                        textBaseline: processesLabel.textBaseline
                         text: Monitor.ready ? Monitor.metrics.processCount : ""
                         color: FishUI.Theme.disabledTextColor
                         font.pointSize: 9
@@ -163,6 +174,7 @@ FishUI.Window {
 
             ResourceSummary {
                 objectName: "cpuSummary"
+                iconName: "cpu"
                 width: parent.width
                 title: qsTr("CPU")
                 value: Monitor.formatPercent(Monitor.metrics.cpuPercent)
@@ -175,6 +187,7 @@ FishUI.Window {
 
             ResourceSummary {
                 objectName: "memorySummary"
+                iconName: "memory"
                 width: parent.width
                 title: qsTr("Memory")
                 value: Monitor.formatPercent(Monitor.metrics.memoryPercent)
@@ -187,6 +200,7 @@ FishUI.Window {
 
             ResourceSummary {
                 objectName: "networkSummary"
+                iconName: "network"
                 width: parent.width
                 title: qsTr("Network")
                 value: "↓ " + Monitor.formatRate(Monitor.metrics.download)
@@ -201,6 +215,7 @@ FishUI.Window {
 
             ResourceSummary {
                 objectName: "diskSummary"
+                iconName: "disk"
                 width: parent.width
                 title: qsTr("Disk")
                 value: Monitor.formatRate(Monitor.metrics.diskRead)
@@ -215,6 +230,7 @@ FishUI.Window {
 
             ResourceSummary {
                 objectName: "gpuSummary"
+                iconName: "gpu"
                 width: parent.width
                 visible: Monitor.metrics.gpuAvailable
                 title: qsTr("GPU")
