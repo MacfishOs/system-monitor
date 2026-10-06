@@ -13,13 +13,12 @@ AbstractButton {
     property string value
     property string subtitle
     property var values: []
-    property var secondaryValues: []
     property color chartColor
-    property color secondaryColor: chartColor
     property real maximum: 100
+    property real scaleFloor: 1024
     property bool selected: false
 
-    height: 112
+    height: 96
     padding: 12
     hoverEnabled: true
     Accessible.name: title + " " + value + " " + subtitle
@@ -71,13 +70,13 @@ AbstractButton {
             Layout.fillWidth: true
             Layout.fillHeight: true
             values: control.values
-            secondaryValues: control.secondaryValues
             timestamps: Monitor.history.timestamps || []
             duration: Monitor.historyDuration * 1000
             color: control.chartColor
-            secondaryColor: control.secondaryColor
             maximum: control.maximum
-            gridColor: Qt.alpha(FishUI.Theme.textColor, 0.06)
+            scaleFloor: control.scaleFloor
+            curved: true
+            lineWidth: 1.25
         }
     }
 }

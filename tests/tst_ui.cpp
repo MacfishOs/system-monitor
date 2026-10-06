@@ -365,7 +365,7 @@ void UiTest::measuredAlignment()
             continue;
         QCOMPARE(qRound(summary->mapToScene({}).x()), 12);
         QCOMPARE(qRound(summary->width()), 216);
-        QCOMPARE(qRound(summary->height()), 112);
+        QCOMPARE(qRound(summary->height()), 96);
     }
 }
 

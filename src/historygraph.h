@@ -16,6 +16,9 @@ class HistoryGraph : public QQuickPaintedItem
     Q_PROPERTY(QColor secondaryColor READ secondaryColor WRITE setSecondaryColor NOTIFY appearanceChanged)
     Q_PROPERTY(QColor gridColor READ gridColor WRITE setGridColor NOTIFY appearanceChanged)
     Q_PROPERTY(double maximum READ maximum WRITE setMaximum NOTIFY appearanceChanged)
+    Q_PROPERTY(double scaleFloor READ scaleFloor WRITE setScaleFloor NOTIFY appearanceChanged)
+    Q_PROPERTY(bool curved READ curved WRITE setCurved NOTIFY appearanceChanged)
+    Q_PROPERTY(double lineWidth READ lineWidth WRITE setLineWidth NOTIFY appearanceChanged)
     Q_PROPERTY(double effectiveMaximum READ effectiveMaximum NOTIFY valuesChanged)
 
 public:
@@ -37,6 +40,13 @@ public:
     void setGridColor(const QColor &color);
     double maximum() const;
     void setMaximum(double maximum);
+    // The smallest full scale an automatic maximum may pick.
+    double scaleFloor() const;
+    void setScaleFloor(double floor);
+    bool curved() const;
+    void setCurved(bool curved);
+    double lineWidth() const;
+    void setLineWidth(double width);
     double effectiveMaximum() const;
 
 signals:
@@ -52,4 +62,7 @@ private:
     QColor m_secondaryColor;
     QColor m_gridColor;
     double m_maximum = 100;
+    double m_scaleFloor = 1024;
+    bool m_curved = false;
+    double m_lineWidth = 1.5;
 };

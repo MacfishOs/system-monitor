@@ -34,6 +34,12 @@ FishUI.Window {
                                    : Monitor.process(selectedPid, selectedStart);
     }
 
+    function sumSeries(first, second) {
+        first = first || [];
+        second = second || [];
+        return first.map((value, index) => value + (second[index] || 0));
+    }
+
     LayoutMirroring.enabled: Qt.application.layoutDirection === Qt.RightToLeft
     LayoutMirroring.childrenInherit: true
 
@@ -178,11 +184,10 @@ FishUI.Window {
                 title: qsTr("Network")
                 value: "↓ " + Monitor.formatRate(Monitor.metrics.download)
                 subtitle: "↑ " + Monitor.formatRate(Monitor.metrics.upload)
-                values: Monitor.history.download || []
-                secondaryValues: Monitor.history.upload || []
+                values: rootWindow.sumSeries(Monitor.history.download, Monitor.history.upload)
                 chartColor: FishUI.Theme.greenColor
-                secondaryColor: FishUI.Theme.blueColor
                 maximum: 0
+                scaleFloor: 1024 * 1024
                 selected: rootWindow.currentPage === 3
                 onClicked: rootWindow.currentPage = 3
             }
@@ -193,11 +198,10 @@ FishUI.Window {
                 title: qsTr("Disk")
                 value: Monitor.formatRate(Monitor.metrics.diskRead)
                 subtitle: qsTr("Write %1").arg(Monitor.formatRate(Monitor.metrics.diskWrite))
-                values: Monitor.history.diskRead || []
-                secondaryValues: Monitor.history.diskWrite || []
+                values: rootWindow.sumSeries(Monitor.history.diskRead, Monitor.history.diskWrite)
                 chartColor: FishUI.Theme.orangeColor
-                secondaryColor: FishUI.Theme.purpleColor
                 maximum: 0
+                scaleFloor: 1024 * 1024
                 selected: rootWindow.currentPage === 4
                 onClicked: rootWindow.currentPage = 4
             }
