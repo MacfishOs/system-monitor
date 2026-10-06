@@ -128,9 +128,14 @@ FishUI.Window {
                 onClicked: rootWindow.currentPage = 0
                 Accessible.name: qsTr("Processes")
 
+                // Same plate as the ResourceSummary cards below.
                 background: FishUI.RoundedRectangle {
-                    radius: FishUI.Theme.smallRadius
-                    color: processesButton.highlighted ? Qt.alpha(FishUI.Theme.highlightColor, 0.12) : processesButton.hovered ? Qt.alpha(FishUI.Theme.textColor, 0.05) : "transparent"
+                    radius: FishUI.Theme.mediumRadius
+                    color: processesButton.highlighted ? Qt.alpha(FishUI.Theme.highlightColor, FishUI.Theme.darkMode ? 0.15 : 0.09)
+                                                       : processesButton.hovered ? Qt.tint(FishUI.Theme.secondBackgroundColor, Qt.alpha(FishUI.Theme.textColor, 0.025))
+                                                                                 : FishUI.Theme.secondBackgroundColor
+                    border.width: processesButton.highlighted || processesButton.visualFocus ? 1 / FishUI.Dpi.ratio : 0
+                    border.color: Qt.alpha(FishUI.Theme.highlightColor, 0.5)
                 }
 
                 contentItem: RowLayout {
