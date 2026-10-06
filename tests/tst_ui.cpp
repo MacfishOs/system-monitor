@@ -104,7 +104,7 @@ void UiTest::resourcePages()
                 auto chart = window->findChild<QQuickItem *>(QStringLiteral("resourceChart"));
                 QVERIFY(chart);
                 QVERIFY(chart->width() > 400);
-                QCOMPARE(qRound(chart->mapToScene({}).x()), 264);
+                QCOMPARE(qRound(chart->mapToScene({}).x()), 252);
                 auto graph = chart->findChild<HistoryGraph *>(QStringLiteral("historyGraph"));
                 auto scale = chart->findChild<QQuickItem *>(QStringLiteral("chartScaleLabel"));
                 QVERIFY(graph && scale);
@@ -324,7 +324,7 @@ void UiTest::measuredAlignment()
     const qreal firstBaseline = applicationTitle->mapToScene({}).y() + applicationTitle->property("baselineOffset").toReal();
     const qreal secondBaseline = pageTitle->mapToScene({}).y() + pageTitle->property("baselineOffset").toReal();
     QVERIFY(qAbs(firstBaseline - secondBaseline) < 0.01);
-    QCOMPARE(qRound(pageTitle->mapToScene({}).x()), 264);
+    QCOMPARE(qRound(pageTitle->mapToScene({}).x()), 252);
     const qreal capitalCenter = applicationTitle->property("capCenter").toReal();
     const qreal buttonCenter = window->property("windowButtonsTopMargin").toReal() + 16;
     QVERIFY(qAbs(buttonCenter - capitalCenter) <= 0.5);

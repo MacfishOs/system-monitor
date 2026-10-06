@@ -45,17 +45,6 @@ FishUI.Window {
     LayoutMirroring.enabled: Qt.application.layoutDirection === Qt.RightToLeft
     LayoutMirroring.childrenInherit: true
 
-    Rectangle {
-        objectName: "sidebarBackground"
-        anchors.left: parent.left
-        anchors.top: parent.top
-        anchors.bottom: parent.bottom
-        width: rootWindow.sidebarWidth
-        color: FishUI.Theme.darkMode ? Qt.lighter(FishUI.Theme.backgroundColor, 1.5)
-                                     : Qt.darker(FishUI.Theme.backgroundColor, 1.05)
-        opacity: 0.7
-    }
-
     headerItem: Item {
         RowLayout {
             anchors.fill: parent
@@ -66,7 +55,7 @@ FishUI.Window {
             FishUI.AlignedLabel {
                 id: applicationTitle
                 objectName: "applicationTitle"
-                Layout.preferredWidth: rootWindow.sidebarWidth - 8
+                Layout.preferredWidth: rootWindow.sidebarWidth - 20
                 textBaseline: rootWindow.headerBaseline
                 text: rootWindow.title
                 font.pointSize: 11
