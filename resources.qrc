@@ -9,7 +9,6 @@
         <file alias="ColumnHeader.qml">qml/ColumnHeader.qml</file>
         <file alias="ResourcePage.qml">qml/ResourcePage.qml</file>
         <file alias="ChartCard.qml">qml/ChartCard.qml</file>
-        <file alias="DetailRow.qml">qml/DetailRow.qml</file>
         <file alias="ListCard.qml">qml/ListCard.qml</file>
         <file alias="InfoRow.qml">qml/InfoRow.qml</file>
         <file alias="SectionLabel.qml">qml/SectionLabel.qml</file>
