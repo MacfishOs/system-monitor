@@ -40,6 +40,13 @@ Item {
                     Monitor.scope = currentIndex
                     page.clearSelection()
                 }
+
+                background: FishUI.RoundedRectangle {
+                    continuousCorners: false
+                    color: FishUI.Theme.darkMode ? Qt.rgba(1, 1, 1, 0.05) : Qt.rgba(0, 0, 0, 0.03)
+                    radius: height / 2
+                }
+
                 FishUI.TabButton {
                     text: qsTr("Applications")
                     font.pointSize: 9
