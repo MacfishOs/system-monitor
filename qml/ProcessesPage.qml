@@ -20,7 +20,7 @@ Item {
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 24
-        anchors.topMargin: 12
+        anchors.topMargin: 26
         anchors.bottomMargin: 12
         anchors.rightMargin: 24
         spacing: 16

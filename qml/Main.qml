@@ -27,6 +27,8 @@ FishUI.Window {
     property string selectedStart: ""
     property bool selectedApplication: true
     readonly property int sidebarWidth: 240
+    // The title and window buttons end on this line; content spacing is measured from it.
+    readonly property int headerBaseline: 28
     readonly property var pageTitles: [qsTr("Processes"), qsTr("CPU"), qsTr("Memory"), qsTr("Network"), qsTr("Disk"), qsTr("GPU")]
     readonly property var selectedProcess: {
         Monitor.metrics;
@@ -65,7 +67,7 @@ FishUI.Window {
                 id: applicationTitle
                 objectName: "applicationTitle"
                 Layout.preferredWidth: rootWindow.sidebarWidth - 8
-                textBaseline: 28
+                textBaseline: rootWindow.headerBaseline
                 text: rootWindow.title
                 font.pointSize: 11
                 color: rootWindow.active ? FishUI.Theme.textColor : FishUI.Theme.disabledTextColor
@@ -75,7 +77,7 @@ FishUI.Window {
             FishUI.AlignedLabel {
                 objectName: "pageTitle"
                 Layout.fillWidth: true
-                textBaseline: 28
+                textBaseline: rootWindow.headerBaseline
                 text: rootWindow.pageTitles[rootWindow.currentPage]
                 font.pointSize: 11
                 color: rootWindow.active ? FishUI.Theme.textColor : FishUI.Theme.disabledTextColor
@@ -247,6 +249,18 @@ FishUI.Window {
         }
     }
 
+    ProcessesPage {
+        id: processesPage
+        anchors.left: parent.left
+        anchors.leftMargin: rootWindow.sidebarWidth
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.topMargin: rootWindow.headerBaseline
+        anchors.bottom: parent.bottom
+        visible: rootWindow.currentPage === 0
+        window: rootWindow
+    }
+
     Item {
         anchors.left: parent.left
         anchors.leftMargin: rootWindow.sidebarWidth
@@ -255,13 +269,6 @@ FishUI.Window {
         anchors.topMargin: rootWindow.header.height
         anchors.bottom: parent.bottom
         clip: true
-
-        ProcessesPage {
-            id: processesPage
-            anchors.fill: parent
-            visible: rootWindow.currentPage === 0
-            window: rootWindow
-        }
 
         Loader {
             anchors.fill: parent
