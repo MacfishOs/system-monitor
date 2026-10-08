@@ -12,9 +12,17 @@ Flickable {
     required property int page
     readonly property var metrics: Monitor.metrics
     readonly property bool gpuTemperatureChart: page === 5 && !metrics.gpuHasBusy
-    contentHeight: content.height + 36
+    topMargin: 8
+    bottomMargin: 24
+    leftMargin: 12
+    rightMargin: 12
+    contentWidth: width - (leftMargin + rightMargin)
+    contentHeight: content.height
     clip: true
     boundsBehavior: Flickable.StopAtBounds
+
+    // Flickable does not include topMargin in its initial content position.
+    Component.onCompleted: contentY = -topMargin
 
     FishUI.WheelHandler {
         target: view
@@ -23,9 +31,7 @@ Flickable {
 
     ColumnLayout {
         id: content
-        x: 12
-        y: 12
-        width: parent.width - 24
+        width: view.contentWidth
         spacing: 20
 
         ChartCard {

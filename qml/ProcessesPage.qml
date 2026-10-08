@@ -22,7 +22,7 @@ Item {
         anchors.fill: parent
         anchors.margins: 24
         anchors.leftMargin: 12
-        anchors.topMargin: 26
+        anchors.topMargin: 22
         anchors.bottomMargin: 12
         anchors.rightMargin: 12
         spacing: 16

@@ -94,9 +94,17 @@ FishUI.Window {
         anchors.topMargin: rootWindow.header.height
         anchors.bottom: parent.bottom
         width: rootWindow.sidebarWidth
-        contentHeight: sidebarContent.height + 24
+        topMargin: 4
+        bottomMargin: 16
+        leftMargin: 12
+        rightMargin: 12
+        contentWidth: width - (leftMargin + rightMargin)
+        contentHeight: sidebarContent.height
         clip: true
         boundsBehavior: Flickable.StopAtBounds
+
+        // Flickable does not include topMargin in its initial content position.
+        Component.onCompleted: contentY = -topMargin
 
         FishUI.WheelHandler {
             target: sidebar
@@ -105,9 +113,7 @@ FishUI.Window {
 
         Column {
             id: sidebarContent
-            x: 12
-            y: 8
-            width: parent.width - 24
+            width: sidebar.contentWidth
             spacing: 12
 
             ItemDelegate {
