@@ -19,7 +19,6 @@ Flickable {
     contentWidth: width - (leftMargin + rightMargin)
     contentHeight: content.height
     clip: true
-    boundsBehavior: Flickable.StopAtBounds
 
     // Flickable does not include topMargin in its initial content position.
     Component.onCompleted: contentY = -topMargin

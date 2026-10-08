@@ -101,7 +101,6 @@ FishUI.Window {
         contentWidth: width - (leftMargin + rightMargin)
         contentHeight: sidebarContent.height
         clip: true
-        boundsBehavior: Flickable.StopAtBounds
 
         // Flickable does not include topMargin in its initial content position.
         Component.onCompleted: contentY = -topMargin

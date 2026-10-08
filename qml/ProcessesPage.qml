@@ -245,7 +245,6 @@ Item {
                     Layout.fillHeight: true
                     clip: true
                     model: page.model
-                    boundsBehavior: Flickable.StopAtBounds
                     currentIndex: -1
                     keyNavigationEnabled: true
                     highlightMoveDuration: 0
