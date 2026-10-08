@@ -46,6 +46,8 @@ Monitor::Monitor(QObject *parent)
     m_metrics.insert(QStringLiteral("cpuName"), QString());
     m_metrics.insert(QStringLiteral("gpuName"), QString());
     QSettings settings(Preferences::ownFile(), QSettings::IniFormat);
+    const int interval = settings.value(QStringLiteral("UpdateInterval"), 1000).toInt();
+    m_timer.setInterval(interval == 2000 || interval == 5000 ? interval : 1000);
     settings.beginGroup(QStringLiteral("Processes"));
     m_scope = qBound(0, settings.value(QStringLiteral("Scope"), m_scope).toInt(), 2);
     m_filter.setAllUsers(m_scope == 2);
@@ -55,7 +57,6 @@ Monitor::Monitor(QObject *parent)
     m_applicationFilter.setSorting(column, ascending);
 
     m_historyClock.start();
-    m_timer.setInterval(1000);
     connect(&m_timer, &QTimer::timeout, this, &Monitor::sample);
     connect(&m_watcher, &QFutureWatcher<Snapshot>::finished, this, &Monitor::acceptSample);
     connect(&m_volumeWatcher, &QFutureWatcher<QVariantList>::finished, this, [this] {
@@ -97,6 +98,7 @@ void Monitor::setInterval(int interval)
     if ((interval != 1000 && interval != 2000 && interval != 5000) || interval == m_timer.interval())
         return;
     m_timer.setInterval(interval);
+    savePreferences();
     emit intervalChanged();
     emit updated();
 }
@@ -366,6 +368,7 @@ void Monitor::sortBy(const QString &column)
 void Monitor::savePreferences() const
 {
     QSettings settings(Preferences::ownFile(), QSettings::IniFormat);
+    settings.setValue(QStringLiteral("UpdateInterval"), m_timer.interval());
     settings.beginGroup(QStringLiteral("Processes"));
     settings.setValue(QStringLiteral("Scope"), m_scope);
     settings.setValue(QStringLiteral("SortColumn"), m_filter.sortColumn());

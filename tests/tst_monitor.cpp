@@ -90,7 +90,7 @@ private slots:
     void drmClientAccounting();
     void firstPublishedSample();
     void intervalPreservesHistory();
-    void rememberedScopeAndSorting();
+    void rememberedPreferences();
 };
 
 void MonitorTest::initTestCase()
@@ -689,21 +689,24 @@ void MonitorTest::intervalPreservesHistory()
     QCOMPARE(timestamps.first(), history.value(QStringLiteral("timestamps")).toList().first());
 }
 
-void MonitorTest::rememberedScopeAndSorting()
+void MonitorTest::rememberedPreferences()
 {
     QFile::remove(Preferences::ownFile());
     {
         Monitor monitor;
+        QCOMPARE(monitor.interval(), 1000);
         QCOMPARE(monitor.scope(), 1);
         QVERIFY(!monitor.processes()->allUsers());
         QCOMPARE(monitor.processes()->sortColumn(), QStringLiteral("cpu"));
         QVERIFY(!monitor.processes()->ascending());
         monitor.setScope(2);
+        monitor.setInterval(5000);
         monitor.sortBy(QStringLiteral("memory"));
         monitor.sortBy(QStringLiteral("memory"));
     }
 
     Monitor monitor;
+    QCOMPARE(monitor.interval(), 5000);
     QCOMPARE(monitor.scope(), 2);
     QVERIFY(monitor.processes()->allUsers());
     for (const ProcessFilter *filter : { monitor.processes(), monitor.applications() }) {
