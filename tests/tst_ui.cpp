@@ -370,6 +370,13 @@ void UiTest::measuredAlignment()
     QVERIFY(qAbs(actionRect.center().y() - searchCenter) < 0.01);
     QCOMPARE(actionRect.right(), tableRect.right());
     QCOMPARE(actionRect.width(), actionRect.height());
+    auto scopeList = scope->property("contentItem").value<QQuickItem *>();
+    QVERIFY(scopeList);
+    auto scopeHighlight = scopeList->property("highlightItem").value<QQuickItem *>();
+    QVERIFY(scopeHighlight && !scopeHighlight->childItems().isEmpty());
+    auto selectedPill = scopeHighlight->childItems().first();
+    const QRectF selectedRect = selectedPill->mapRectToScene(selectedPill->boundingRect());
+    QVERIFY(qAbs(selectedRect.center().y() - searchCenter) < 0.01);
     auto actionIcon = window->findChild<QQuickItem *>(QStringLiteral("endProcessIcon"));
     QVERIFY(actionIcon);
     const QRectF iconRect = actionIcon->mapRectToScene(actionIcon->boundingRect());
@@ -384,6 +391,7 @@ void UiTest::measuredAlignment()
     QCOMPARE(scrollBarRect.top(), listRect.top());
     QCOMPARE(scrollBarRect.bottom(), listRect.bottom());
     qInfo() << "Process action rect:" << actionRect << "icon rect:" << iconRect
+            << "selected scope rect:" << selectedRect
             << "scroll bar rect:" << scrollBarRect << "list rect:" << listRect
             << "table rect:" << tableRect
             << "Interval button rect:" << intervalRect << "minimize button rect:" << minimizeRect

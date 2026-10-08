@@ -66,7 +66,7 @@ Item {
                 id: search
                 objectName: "processSearch"
                 Layout.fillWidth: true
-                Layout.preferredHeight: 36
+                Layout.preferredHeight: 30
                 leftPadding: 34
                 rightPadding: text.length > 0 ? 34 : 12
                 topPadding: 0
@@ -137,8 +137,8 @@ Item {
             AbstractButton {
                 id: endButton
                 objectName: "endProcessButton"
-                Layout.preferredWidth: 36
-                Layout.preferredHeight: 36
+                Layout.preferredWidth: 30
+                Layout.preferredHeight: 30
                 padding: 0
                 text: qsTr("Quit")
                 enabled: !!page.window.selectedProcess.canManage
