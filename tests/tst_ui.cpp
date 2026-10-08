@@ -376,7 +376,15 @@ void UiTest::measuredAlignment()
     QCOMPARE(iconRect.size(), QSizeF(16, 16));
     QVERIFY(qAbs(iconRect.center().x() - actionRect.center().x()) < 0.01);
     QVERIFY(qAbs(iconRect.center().y() - searchCenter) < 0.01);
+    auto scrollBar = window->findChild<QQuickItem *>(QStringLiteral("processScrollBar"));
+    QVERIFY(scrollBar);
+    const QRectF scrollBarRect = scrollBar->mapRectToScene(scrollBar->boundingRect());
+    const QRectF listRect = list->mapRectToScene(list->boundingRect());
+    QCOMPARE(scrollBarRect.right(), window->width());
+    QCOMPARE(scrollBarRect.top(), listRect.top());
+    QCOMPARE(scrollBarRect.bottom(), listRect.bottom());
     qInfo() << "Process action rect:" << actionRect << "icon rect:" << iconRect
+            << "scroll bar rect:" << scrollBarRect << "list rect:" << listRect
             << "table rect:" << tableRect
             << "Interval button rect:" << intervalRect << "minimize button rect:" << minimizeRect
             << "Process list height:" << list->height();

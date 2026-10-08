@@ -18,12 +18,13 @@ Item {
     readonly property int pidWidth: 64
 
     ColumnLayout {
+        id: content
         anchors.fill: parent
         anchors.margins: 24
         anchors.leftMargin: 12
         anchors.topMargin: 26
         anchors.bottomMargin: 12
-        anchors.rightMargin: 24
+        anchors.rightMargin: 12
         spacing: 16
 
         RowLayout {
@@ -252,7 +253,7 @@ Item {
                     FishUI.WheelHandler {
                         target: list
                     }
-                    FishUI.ScrollBar.vertical: FishUI.ScrollBar {}
+                    FishUI.ScrollBar.vertical: listScrollBar
 
                     delegate: ItemDelegate {
                         id: row
@@ -401,6 +402,15 @@ Item {
                 }
             }
         }
+    }
+
+    // Lives at the window's right edge, beside the table rather than over its rows.
+    FishUI.ScrollBar {
+        id: listScrollBar
+        objectName: "processScrollBar"
+        x: page.width - width
+        y: content.y + table.y + list.y
+        height: list.height
     }
 
     FishUI.DesktopMenu {
