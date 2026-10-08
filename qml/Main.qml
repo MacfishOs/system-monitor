@@ -80,7 +80,7 @@ FishUI.Window {
                 size: rootWindow.header.buttonSize
                 artwork: "menu"
                 checked: intervalMenu.visible
-                onClicked: intervalMenu.popup()
+                onClicked: intervalMenu.popupFor(intervalButton.background, FishUI.Units.smallSpacing / 2)
                 Accessible.name: qsTr("Update interval")
             }
         }
