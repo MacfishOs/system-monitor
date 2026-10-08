@@ -22,5 +22,6 @@
         <file alias="network.svg">icons/network.svg</file>
         <file alias="disk.svg">icons/disk.svg</file>
         <file alias="gpu.svg">icons/gpu.svg</file>
+        <file alias="quit.svg">icons/quit.svg</file>
     </qresource>
 </RCC>

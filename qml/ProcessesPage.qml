@@ -136,13 +136,10 @@ Item {
             AbstractButton {
                 id: endButton
                 objectName: "endProcessButton"
+                Layout.preferredWidth: 36
                 Layout.preferredHeight: 36
-                leftPadding: 16
-                rightPadding: 16
-                topPadding: 0
-                bottomPadding: 0
+                padding: 0
                 text: qsTr("Quit")
-                font.pointSize: 9
                 enabled: !!page.window.selectedProcess.canManage
                 hoverEnabled: true
                 focusPolicy: Qt.NoFocus
@@ -159,13 +156,15 @@ Item {
                            : FishUI.Theme.secondBackgroundColor
                 }
 
-                contentItem: Text {
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                    text: endButton.text
-                    font: endButton.font
-                    color: !endButton.enabled ? FishUI.Theme.disabledTextColor
-                                              : FishUI.Theme.darkMode ? "#ff453a" : "#d92d20"
+                contentItem: Item {
+                    FishUI.IconItem {
+                        objectName: "endProcessIcon"
+                        anchors.centerIn: parent
+                        width: 16
+                        height: 16
+                        source: "qrc:/icons/quit.svg"
+                        color: endButton.enabled ? FishUI.Theme.textColor : FishUI.Theme.disabledTextColor
+                    }
                 }
             }
         }

@@ -369,13 +369,14 @@ void UiTest::measuredAlignment()
     QCOMPARE(actionRect.height(), search->height());
     QVERIFY(qAbs(actionRect.center().y() - searchCenter) < 0.01);
     QCOMPARE(actionRect.right(), tableRect.right());
-    auto actionLabel = endButton->property("contentItem").value<QQuickItem *>();
-    auto scopeLabel = scope->property("currentItem").value<QQuickItem *>();
-    QVERIFY(actionLabel && scopeLabel);
-    const qreal actionBaseline = actionLabel->mapToScene({}).y() + actionLabel->property("baselineOffset").toReal();
-    const qreal scopeBaseline = scopeLabel->mapToScene({}).y() + scopeLabel->property("baselineOffset").toReal();
-    QVERIFY(qAbs(actionBaseline - scopeBaseline) < 0.01);
-    qInfo() << "Process action rect:" << actionRect << "baseline:" << actionBaseline << "scope baseline:" << scopeBaseline
+    QCOMPARE(actionRect.width(), actionRect.height());
+    auto actionIcon = window->findChild<QQuickItem *>(QStringLiteral("endProcessIcon"));
+    QVERIFY(actionIcon);
+    const QRectF iconRect = actionIcon->mapRectToScene(actionIcon->boundingRect());
+    QCOMPARE(iconRect.size(), QSizeF(16, 16));
+    QVERIFY(qAbs(iconRect.center().x() - actionRect.center().x()) < 0.01);
+    QVERIFY(qAbs(iconRect.center().y() - searchCenter) < 0.01);
+    qInfo() << "Process action rect:" << actionRect << "icon rect:" << iconRect
             << "table rect:" << tableRect
             << "Interval button rect:" << intervalRect << "minimize button rect:" << minimizeRect
             << "Process list height:" << list->height();
