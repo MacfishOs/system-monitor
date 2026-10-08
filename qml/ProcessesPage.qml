@@ -270,7 +270,7 @@ Item {
                         required property bool ioAvailable
                         required property string startTicks
                         width: list.width
-                        height: 40
+                        height: 36
                         padding: 0
                         hoverEnabled: false
                         highlighted: page.window.selectedPid === pid && page.window.selectedStart === startTicks
