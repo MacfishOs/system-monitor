@@ -26,7 +26,9 @@ Flickable {
     FishUI.WheelHandler {
         target: view
     }
-    FishUI.ScrollBar.vertical: FishUI.ScrollBar {}
+    FishUI.ScrollBar.vertical: FishUI.ScrollBar {
+        objectName: "resourceScrollBar"
+    }
 
     ColumnLayout {
         id: content

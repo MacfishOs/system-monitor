@@ -42,6 +42,7 @@ private slots:
     void init();
     void resourcePages_data();
     void resourcePages();
+    void resourcePageScrollBarHidden();
     void keyboardAndSelection();
     void desktopContextMenu();
     void applicationView();
@@ -127,6 +128,52 @@ void UiTest::resourcePages()
             QCOMPARE(warnings.count(), 0);
         }
     }
+}
+
+void UiTest::resourcePageScrollBarHidden()
+{
+    Monitor monitor;
+    QQmlApplicationEngine engine;
+    engine.rootContext()->setContextProperty(QStringLiteral("Monitor"), &monitor);
+    engine.load(QUrl(QStringLiteral("qrc:/qml/Main.qml")));
+    QVERIFY(!engine.rootObjects().isEmpty());
+    auto window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
+    QVERIFY(window);
+    QTRY_VERIFY_WITH_TIMEOUT(monitor.ready(), 5000);
+    window->resize(840, 500);
+    QVERIFY(QTest::qWaitForWindowExposed(window));
+
+    // Opening a page lays it out without scrolling it, so its bar stays hidden.
+    for (int page = 1; page <= 5; ++page) {
+        QVERIFY(window->setProperty("currentPage", page));
+        QQuickItem *bar = nullptr;
+        QTRY_VERIFY((bar = window->findChild<QQuickItem *>(QStringLiteral("resourceScrollBar"))));
+        QElapsedTimer elapsed;
+        elapsed.start();
+        while (elapsed.elapsed() < 400) {
+            QVERIFY2(bar->property("contentItem").value<QQuickItem *>()->opacity() == 0,
+                     qPrintable(QStringLiteral("Page %1, bar size %2").arg(page).arg(bar->property("size").toReal())));
+            QTest::qWait(10);
+        }
+        if (page == 1)
+            QVERIFY(bar->property("size").toReal() < 1);
+    }
+
+    QVERIFY(window->setProperty("currentPage", 1));
+    QQuickItem *bar = nullptr;
+    QTRY_VERIFY((bar = window->findChild<QQuickItem *>(QStringLiteral("resourceScrollBar"))));
+    auto *handle = bar->property("contentItem").value<QQuickItem *>();
+    QTest::qWait(200);
+    const QPointF inside = bar->parentItem()->mapToScene(QPointF(bar->parentItem()->width() / 2, 100));
+    QWheelEvent step(inside, window->mapToGlobal(inside), {}, {0, -120}, Qt::NoButton, Qt::NoModifier,
+                     Qt::NoScrollPhase, false);
+    QCoreApplication::sendEvent(window, &step);
+    QTRY_VERIFY(handle->opacity() > 0);
+    QTRY_COMPARE_WITH_TIMEOUT(handle->opacity(), 0.0, 3000);
+
+    const QPointF onBar = bar->mapToScene(QPointF(bar->width() / 2, bar->height() / 2));
+    QTest::mouseMove(window, onBar.toPoint());
+    QTRY_VERIFY(handle->opacity() > 0);
 }
 
 void UiTest::keyboardAndSelection()
