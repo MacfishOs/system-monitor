@@ -115,6 +115,7 @@ FishUI.Window {
                 objectName: "processesNavigation"
                 width: parent.width
                 height: 36
+                hoverEnabled: false
                 highlighted: rootWindow.currentPage === 0
                 onClicked: rootWindow.currentPage = 0
                 Accessible.name: qsTr("Processes")
@@ -123,8 +124,7 @@ FishUI.Window {
                 background: FishUI.RoundedRectangle {
                     radius: FishUI.Theme.mediumRadius
                     color: processesButton.highlighted ? Qt.alpha(FishUI.Theme.highlightColor, FishUI.Theme.darkMode ? 0.15 : 0.09)
-                                                       : processesButton.hovered ? Qt.tint(FishUI.Theme.secondBackgroundColor, Qt.alpha(FishUI.Theme.textColor, 0.025))
-                                                                                 : FishUI.Theme.secondBackgroundColor
+                                                       : FishUI.Theme.secondBackgroundColor
                     border.width: processesButton.highlighted || processesButton.visualFocus ? 1 / FishUI.Dpi.ratio : 0
                     border.color: Qt.alpha(FishUI.Theme.highlightColor, 0.5)
                 }

@@ -21,14 +21,12 @@ AbstractButton {
 
     height: 96
     padding: 12
-    hoverEnabled: true
     Accessible.name: title + " " + value + " " + subtitle
 
     background: FishUI.RoundedRectangle {
         radius: FishUI.Theme.mediumRadius
         color: control.selected ? Qt.alpha(control.chartColor, FishUI.Theme.darkMode ? 0.15 : 0.09)
-                                : control.hovered ? Qt.tint(FishUI.Theme.secondBackgroundColor, Qt.alpha(FishUI.Theme.textColor, 0.025))
-                                                  : FishUI.Theme.secondBackgroundColor
+                                : FishUI.Theme.secondBackgroundColor
         border.width: control.selected || control.visualFocus ? 1 / FishUI.Dpi.ratio : 0
         border.color: Qt.alpha(control.chartColor, 0.5)
     }
