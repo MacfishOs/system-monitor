@@ -164,7 +164,8 @@ Item {
                         width: 16
                         height: 16
                         source: "qrc:/icons/quit.svg"
-                        color: endButton.enabled ? FishUI.Theme.textColor : FishUI.Theme.disabledTextColor
+                        color: FishUI.Theme.textColor
+                        opacity: endButton.enabled ? 1.0 : 0.35
                     }
                 }
             }

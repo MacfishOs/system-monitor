@@ -381,6 +381,17 @@ void UiTest::measuredAlignment()
     QVERIFY(actionIcon);
     const QRectF iconRect = actionIcon->mapRectToScene(actionIcon->boundingRect());
     QCOMPARE(iconRect.size(), QSizeF(16, 16));
+    {
+        QVERIFY(!endButton->isEnabled());
+        const QImage grab = window->grabWindow();
+        const QRect r = iconRect.toAlignedRect();
+        int darkest = 255;
+        for (int y = r.top(); y <= r.bottom(); ++y)
+            for (int x = r.left(); x <= r.right(); ++x)
+                darkest = qMin(darkest, qGray(grab.pixel(x, y)));
+        qInfo() << "Disabled Quit icon darkest gray:" << darkest;
+        QVERIFY(darkest > 150);
+    }
     QVERIFY(qAbs(iconRect.center().x() - actionRect.center().x()) < 0.01);
     QVERIFY(qAbs(iconRect.center().y() - searchCenter) < 0.01);
     auto scrollBar = window->findChild<QQuickItem *>(QStringLiteral("processScrollBar"));
