@@ -23,10 +23,9 @@ Flickable {
 
     ColumnLayout {
         id: content
-        // The narrower inset faces the sidebar.
-        x: view.LayoutMirroring.enabled ? 24 : 12
+        x: 12
         y: 12
-        width: parent.width - 36
+        width: parent.width - 24
         spacing: 20
 
         ChartCard {
