@@ -6,7 +6,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import FishUI as FishUI
 
-FishUI.Window {
+FishUI.DialogWindow {
     id: dialog
     objectName: "processDetailsWindow"
     property int pid: 0
@@ -18,29 +18,11 @@ FishUI.Window {
     }
 
     title: application ? qsTr("Application Details") : qsTr("Process Details")
-    visible: false
-    flags: Qt.Dialog | Qt.FramelessWindowHint
-    modality: Qt.WindowModal
-    minimizeButtonVisible: false
     width: 480
-    height: 612
-    minimumWidth: 480
-    maximumWidth: 480
-    minimumHeight: 612
-    maximumHeight: 612
+    contentHeight: 612 - header.height
     blurEnabled: false
     background.color: FishUI.Theme.backgroundColor
     background.opacity: 1
-
-    headerItem: Item {
-        FishUI.Label {
-            anchors.left: parent.left
-            anchors.leftMargin: 16
-            anchors.verticalCenter: parent.verticalCenter
-            text: dialog.title
-            font.pointSize: 10
-        }
-    }
 
     ColumnLayout {
         anchors.fill: parent
