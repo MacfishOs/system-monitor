@@ -246,6 +246,14 @@ QVector<ProcessRecord> Monitor::groupApplications(const QVector<ProcessRecord> &
             if (!main || (own && !mainOwn) || (own == mainOwn && process.startTicks < main->startTicks))
                 main = &process;
         }
+        // Reused pids can make every process the parent of another; take the oldest.
+        if (!main) {
+            for (const int index : indexes) {
+                const ProcessRecord &process = processes[index];
+                if (!main || process.startTicks < main->startTicks)
+                    main = &process;
+            }
+        }
 
         auto application = m_applicationIds.constFind(id);
         if (application == m_applicationIds.cend()) {
