@@ -16,10 +16,12 @@
 #include <QQmlContext>
 #include <QQuickWindow>
 
-int main(int argc, char *argv[])
+int cutefish_application_main(int argc, char *argv[])
 {
-    Cutefish::Application::prepare();
-    QGuiApplication app(argc, argv);
+    Q_UNUSED(argc);
+    Q_UNUSED(argv);
+
+    QGuiApplication &app = *qGuiApp;
     app.setApplicationName(QStringLiteral("cutefish-system-monitor"));
     app.setApplicationVersion(QStringLiteral(SYSTEM_MONITOR_VERSION));
     app.setDesktopFileName(QStringLiteral("cutefish-system-monitor"));

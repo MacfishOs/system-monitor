@@ -26,15 +26,17 @@ add_library(monitor-backend STATIC
     src/monitor.cpp
 )
 target_include_directories(monitor-backend PUBLIC src)
+# Linked into the application module.
+set_target_properties(monitor-backend PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_link_libraries(monitor-backend PUBLIC Qt6::Core Qt6::Concurrent Cutefish::Application)
 
-add_executable(${PROJECT_NAME}
+cutefish_add_application(${PROJECT_NAME} SOURCES
     src/main.cpp
     src/historygraph.cpp
     resources.qrc
 )
-target_compile_definitions(${PROJECT_NAME} PRIVATE SYSTEM_MONITOR_VERSION="${PROJECT_VERSION}")
-target_link_libraries(${PROJECT_NAME} PRIVATE
+target_compile_definitions(${PROJECT_NAME}-module PRIVATE SYSTEM_MONITOR_VERSION="${PROJECT_VERSION}")
+target_link_libraries(${PROJECT_NAME}-module PRIVATE
     monitor-backend
     Qt6::Gui
     Qt6::Quick
@@ -42,7 +44,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     Qt6::DBus
 )
 
-install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(FILES cutefish-system-monitor.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
 
 if(BUILD_TESTING)
