@@ -215,6 +215,15 @@ void MonitorTest::samplingAndPidReuse()
     QCOMPARE(second.metrics.value(QStringLiteral("cpuPercent")).toDouble(), 15.0);
     QCOMPARE(second.processes[0].cpu, 5.0);
 
+    // An exec keeps the PID and start time; the new name reads the new program.
+    QVERIFY(QFile::remove(proc + QStringLiteral("/123/exe")));
+    QVERIFY(QFile::link(QStringLiteral("/usr/bin/other-tool"), proc + QStringLiteral("/123/exe")));
+    QVERIFY(writeFile(proc + QStringLiteral("/stat"), "cpu 250 0 125 2125 0 0 0 0\ncpu0 250 0 125 2125 0 0 0 0\n"));
+    QVERIFY(writeFile(proc + QStringLiteral("/123/stat"), processStat(123, QStringLiteral("other-tool"), 95, 1000)));
+    const auto execed = reader.sample();
+    QCOMPARE(execed.processes[0].displayName, QStringLiteral("other-tool"));
+    QCOMPARE(execed.processes[0].cpu, 5.0);
+
     QVERIFY(writeFile(proc + QStringLiteral("/stat"), "cpu 300 0 150 2550 0 0 0 0\n"));
     QVERIFY(writeFile(proc + QStringLiteral("/123/stat"), processStat(123, QStringLiteral("replacement"), 9999, 2000)));
     const auto reused = reader.sample();

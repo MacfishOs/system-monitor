@@ -392,10 +392,12 @@ Snapshot ProcReader::sample()
         }
         process.ioAvailable = hasRead && hasWrite;
 
-        // Identity is read once per process. A second stat read proves the
+        // Identity is read once per program. A second stat read proves the
         // files above did not come from a process that reused the PID.
         const ProcessRecord previous = m_previousProcesses.value(process.pid);
-        if (previous.pid == process.pid && previous.startTicks == process.startTicks) {
+        const bool sameProcess = previous.pid == process.pid && previous.startTicks == process.startTicks;
+        // An exec keeps the PID and start time; the name it changes tells the new program.
+        if (sameProcess && previous.name == process.name) {
             process.executable = previous.executable;
             process.program = previous.program;
             process.command = previous.command;
@@ -411,12 +413,6 @@ Snapshot ProcReader::sample()
             process.scopeSettled = true;
             if (!previous.scopeSettled && process.uid == m_uid && !process.kernelThread)
                 process.scopeId = scopeApplication(readFile(path + QStringLiteral("/cgroup")));
-            if (totalDelta > 0)
-                process.cpu = qMin(100.0, 100.0 * counterDelta(process.cpuTicks, previous.cpuTicks) / totalDelta);
-            if (previous.ioAvailable && process.ioAvailable) {
-                process.readRate = byteRate(process.readBytes, previous.readBytes, elapsed);
-                process.writeRate = byteRate(process.writeBytes, previous.writeBytes, elapsed);
-            }
         } else {
             readIdentity(path, &process);
             if (process.uid == m_uid && !process.kernelThread)
@@ -425,6 +421,14 @@ Snapshot ProcReader::sample()
             if (!parseProcess(readFile(path + QStringLiteral("/stat")), &verified, m_pageSize)
                     || verified.startTicks != process.startTicks)
                 continue;
+        }
+        if (sameProcess) {
+            if (totalDelta > 0)
+                process.cpu = qMin(100.0, 100.0 * counterDelta(process.cpuTicks, previous.cpuTicks) / totalDelta);
+            if (previous.ioAvailable && process.ioAvailable) {
+                process.readRate = byteRate(process.readBytes, previous.readBytes, elapsed);
+                process.writeRate = byteRate(process.writeBytes, previous.writeBytes, elapsed);
+            }
         }
         processes.insert(process.pid, process);
         snapshot.processes.append(process);
