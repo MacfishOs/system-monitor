@@ -20,6 +20,8 @@ struct ProcessRecord
     QString executable;
     QString program;
     QString scopeId;
+    // Chromium's helper process type, such as renderer; empty for other processes.
+    QString helperType;
     QString appId;
     QString state;
     int threads = 0;

@@ -152,6 +152,18 @@ bool ProcReader::parseUid(const QByteArray &status, uint *uid)
     return false;
 }
 
+QByteArray ProcReader::commandArguments(const QByteArray &commandLine, const QString &executable)
+{
+    // Chromium rewrites its title as a single argument joined by spaces.
+    const QByteArray prefix = QFile::encodeName(executable) + ' ';
+    if (executable.isEmpty() || commandLine.indexOf('\0') != commandLine.size() - 1
+            || !commandLine.startsWith(prefix))
+        return commandLine;
+
+    QByteArray arguments = commandLine;
+    return arguments.replace(' ', '\0');
+}
+
 QString ProcReader::applicationProgram(const QByteArray &commandLine)
 {
     const QList<QByteArray> arguments = commandLine.split('\0');
@@ -175,6 +187,48 @@ QString ProcReader::applicationProgram(const QByteArray &commandLine)
     }
 
     return program;
+}
+
+QString ProcReader::helperType(const QByteArray &commandLine)
+{
+    // Chromium starts its helpers from the browser's own binary with --type=
+    // first, so every helper would otherwise carry the browser's name.
+    const QList<QByteArray> arguments = commandLine.split('\0');
+    const QByteArray first = arguments.value(1);
+    if (!first.startsWith("--type="))
+        return {};
+
+    const QByteArray type = first.mid(7);
+    for (const QByteArray &argument : arguments) {
+        if (type == "renderer" && argument == "--extension-process")
+            return QStringLiteral("extension");
+        if (type == "utility" && argument.startsWith("--utility-sub-type="))
+            return QString::fromUtf8(argument.mid(19));
+    }
+    return QString::fromUtf8(type);
+}
+
+QString ProcReader::helperName(const QString &type)
+{
+    if (type == QLatin1String("renderer"))
+        return QCoreApplication::translate("Monitor", "Renderer");
+    if (type == QLatin1String("extension"))
+        return QCoreApplication::translate("Monitor", "Extension");
+    if (type == QLatin1String("gpu-process"))
+        return QCoreApplication::translate("Monitor", "GPU");
+    if (type == QLatin1String("zygote"))
+        return QCoreApplication::translate("Monitor", "Zygote");
+    if (type == QLatin1String("network.mojom.NetworkService"))
+        return QCoreApplication::translate("Monitor", "Network");
+    if (type == QLatin1String("audio.mojom.AudioService"))
+        return QCoreApplication::translate("Monitor", "Audio");
+    if (type == QLatin1String("storage.mojom.StorageService"))
+        return QCoreApplication::translate("Monitor", "Storage");
+    if (type == QLatin1String("video_capture.mojom.VideoCaptureService"))
+        return QCoreApplication::translate("Monitor", "Video Capture");
+    if (type == QLatin1String("utility") || type.contains(QLatin1String(".mojom.")))
+        return QCoreApplication::translate("Monitor", "Utility");
+    return type;
 }
 
 QString ProcReader::scopeApplication(const QByteArray &cgroup)
@@ -242,7 +296,9 @@ void ProcReader::readIdentity(const QString &path, ProcessRecord *process) const
         executable.chop(10);
 
     const QByteArray commandLine = readFile(path + QStringLiteral("/cmdline"));
-    process->program = commandLine.isEmpty() ? executable : applicationProgram(commandLine);
+    const QByteArray arguments = commandArguments(commandLine, executable);
+    process->program = commandLine.isEmpty() ? executable : applicationProgram(arguments);
+    process->helperType = helperType(arguments);
     QByteArray command = commandLine;
     command.replace('\0', ' ');
     process->command = QString::fromLocal8Bit(command).trimmed();
@@ -343,6 +399,7 @@ Snapshot ProcReader::sample()
             process.executable = previous.executable;
             process.program = previous.program;
             process.command = previous.command;
+            process.helperType = previous.helperType;
             process.displayName = previous.displayName;
             process.iconName = previous.iconName;
             process.scopeId = previous.scopeId;

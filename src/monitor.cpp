@@ -185,6 +185,8 @@ void Monitor::identify(ProcessRecord *process)
         process->displayName = application->name;
     if (!application->icon.isEmpty())
         process->iconName = application->icon;
+    if (!process->helperType.isEmpty())
+        process->displayName = tr("%1 (%2)").arg(process->displayName, ProcReader::helperName(process->helperType));
 }
 
 QVector<ProcessRecord> Monitor::groupApplications(const QVector<ProcessRecord> &processes)

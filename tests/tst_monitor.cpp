@@ -155,6 +155,37 @@ void MonitorTest::processNamesAndFields()
     QCOMPARE(ProcReader::applicationProgram(commandLine({ "/usr/bin/python3", "-u", "/usr/bin/fixture-app", "--flag" })),
              QStringLiteral("/usr/bin/fixture-app"));
     QCOMPARE(ProcReader::applicationProgram(commandLine({ "sh", "-c", "fixture-app" })), QString());
+
+    const QString browser = QStringLiteral("/usr/lib/chromium/chromium");
+    const QByteArray title = commandLine({ "/usr/lib/chromium/chromium --type=renderer --lang=en-US" });
+    QCOMPARE(ProcReader::commandArguments(title, browser),
+             commandLine({ "/usr/lib/chromium/chromium", "--type=renderer", "--lang=en-US" }));
+    QCOMPARE(ProcReader::commandArguments(title, QStringLiteral("/usr/bin/other")), title);
+    const QByteArray separate = commandLine({ "/usr/lib/chromium/chromium", "--user-data-dir=/tmp/a b" });
+    QCOMPARE(ProcReader::commandArguments(separate, browser), separate);
+    QCOMPARE(ProcReader::helperType(ProcReader::commandArguments(title, browser)), QStringLiteral("renderer"));
+
+    QCOMPARE(ProcReader::helperType(commandLine({ "/usr/lib/chromium/chromium" })), QString());
+    QCOMPARE(ProcReader::helperType(commandLine({ "/usr/lib/chromium/chromium", "--type=gpu-process", "--lang=en-US" })),
+             QStringLiteral("gpu-process"));
+    QCOMPARE(ProcReader::helperType(commandLine({ "/usr/lib/chromium/chromium", "--type=renderer", "--extension-process" })),
+             QStringLiteral("extension"));
+    QCOMPARE(ProcReader::helperType(commandLine({ "/usr/lib/chromium/chromium", "--type=utility",
+                                                  "--utility-sub-type=network.mojom.NetworkService" })),
+             QStringLiteral("network.mojom.NetworkService"));
+    QCOMPARE(ProcReader::helperType(commandLine({ "/usr/bin/fixture-app", "--verbose", "--type=renderer" })), QString());
+    QCOMPARE(ProcReader::helperName(QStringLiteral("gpu-process")), QStringLiteral("GPU"));
+    QCOMPARE(ProcReader::helperName(QStringLiteral("network.mojom.NetworkService")), QStringLiteral("Network"));
+    QCOMPARE(ProcReader::helperName(QStringLiteral("unzip.mojom.Unzipper")), QStringLiteral("Utility"));
+    QCOMPARE(ProcReader::helperName(QStringLiteral("broker")), QStringLiteral("broker"));
+
+    ProcessRecord application = record(10, QStringLiteral("fixture"));
+    ProcessRecord helper = record(11, QStringLiteral("fixture"));
+    helper.program = QStringLiteral("/opt/fixture/fixture-app");
+    helper.helperType = QStringLiteral("renderer");
+    application.members = { helper };
+    const QVariantList members = ProcessModel::describe(application).value(QStringLiteral("members")).toList();
+    QCOMPARE(members.value(0).toMap().value(QStringLiteral("name")).toString(), QStringLiteral("fixture-app (Renderer)"));
 }
 
 void MonitorTest::samplingAndPidReuse()

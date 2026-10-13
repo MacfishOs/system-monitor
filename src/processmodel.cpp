@@ -3,6 +3,7 @@
 
 #include "processmodel.h"
 
+#include <QCoreApplication>
 #include <QFileInfo>
 
 #include <algorithm>
@@ -103,12 +104,18 @@ static QString programName(const ProcessRecord &process)
     QString executable = process.executable;
     if (executable.endsWith(QLatin1String(" (deleted)")))
         executable.chop(10);
+    QString name = process.name;
     for (const QString &path : { process.program, executable }) {
-        const QString name = QFileInfo(path).fileName();
-        if (!name.isEmpty() && !name.startsWith(QLatin1Char('-')))
-            return name;
+        const QString fileName = QFileInfo(path).fileName();
+        if (!fileName.isEmpty() && !fileName.startsWith(QLatin1Char('-'))) {
+            name = fileName;
+            break;
+        }
     }
-    return process.name;
+
+    if (process.helperType.isEmpty())
+        return name;
+    return QCoreApplication::translate("Monitor", "%1 (%2)").arg(name, ProcReader::helperName(process.helperType));
 }
 
 QVariantMap ProcessModel::describe(const ProcessRecord &process)

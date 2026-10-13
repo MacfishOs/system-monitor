@@ -42,7 +42,10 @@ public:
     static bool parseProcess(const QByteArray &contents, ProcessRecord *process,
                              qint64 pageSize);
     static bool parseUid(const QByteArray &status, uint *uid);
+    static QByteArray commandArguments(const QByteArray &commandLine, const QString &executable);
     static QString applicationProgram(const QByteArray &commandLine);
+    static QString helperType(const QByteArray &commandLine);
+    static QString helperName(const QString &type);
     static QString scopeApplication(const QByteArray &cgroup);
     static bool parsePss(const QByteArray &rollup, quint64 *pss);
     static double cpuUsage(const CpuCounters &current, const CpuCounters &previous);
