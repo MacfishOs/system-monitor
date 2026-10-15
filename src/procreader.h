@@ -5,66 +5,65 @@
 
 #include "diskreader.h"
 #include "gpureader.h"
+#include "metrics.h"
 #include "networkreader.h"
 #include "processrecord.h"
 
-#include <QElapsedTimer>
-#include <QHash>
-#include <QSet>
-#include <QString>
-#include <QVariantMap>
-#include <QVector>
+#include <chrono>
+#include <cstdint>
+#include <string>
+#include <string_view>
+#include <unordered_map>
+#include <vector>
 
 struct CpuCounters
 {
-    quint64 total = 0;
-    quint64 idle = 0;
+    uint64_t total = 0;
+    uint64_t idle = 0;
 };
 
 struct Snapshot
 {
     bool available = false;
     bool baseline = false;
-    QString error;
-    QVariantMap metrics;
-    QVector<ProcessRecord> processes;
+    std::string error;
+    Metrics metrics;
+    std::vector<ProcessRecord> processes;
 };
 
 class ProcReader
 {
 public:
-    explicit ProcReader(const QString &procRoot = QStringLiteral("/proc"),
-                        const QString &sysRoot = QStringLiteral("/sys"));
+    explicit ProcReader(std::string procRoot = "/proc", std::string sysRoot = "/sys");
 
     Snapshot sample();
-    static CpuCounters parseCpu(const QByteArray &line);
-    static QVariantMap parseMemory(const QByteArray &contents);
-    static bool parseProcess(const QByteArray &contents, ProcessRecord *process,
-                             qint64 pageSize);
-    static bool parseUid(const QByteArray &status, uint *uid);
-    static QByteArray commandArguments(const QByteArray &commandLine, const QString &executable);
-    static QString applicationProgram(const QByteArray &commandLine);
-    static QString helperType(const QByteArray &commandLine);
-    static QString helperName(const QString &type);
-    static QString scopeApplication(const QByteArray &cgroup);
-    static bool parsePss(const QByteArray &rollup, quint64 *pss);
-    static double cpuUsage(const CpuCounters &current, const CpuCounters &previous);
-    static QString stateName(const QString &state);
+    static CpuCounters parseCpu(std::string_view line);
+    static MemoryMetrics parseMemory(std::string_view contents);
+    static bool parseProcess(std::string_view contents, ProcessRecord* process, int64_t pageSize);
+    static bool parseUid(std::string_view status, uint32_t* uid);
+    static std::string commandArguments(std::string_view commandLine, const std::string& executable);
+    static std::string applicationProgram(std::string_view commandLine);
+    static std::string helperType(std::string_view commandLine);
+    static std::string helperName(const std::string& type);
+    static std::string scopeApplication(std::string_view cgroup);
+    static bool parsePss(std::string_view rollup, uint64_t* pss);
+    static double cpuUsage(const CpuCounters& current, const CpuCounters& previous);
+    static std::string stateName(const std::string& state);
 
 private:
-    void readIdentity(const QString &path, ProcessRecord *process) const;
-    QString userName(uint uid);
+    void readIdentity(const std::string& path, ProcessRecord* process) const;
+    std::string userName(uint32_t uid);
 
-    QString m_procRoot;
-    QElapsedTimer m_clock;
-    qint64 m_previousTime = 0;
+    std::string m_procRoot;
+    std::chrono::steady_clock::time_point m_clock = std::chrono::steady_clock::now();
+    int64_t m_previousTime = 0;
     bool m_hasPreviousSample = false;
-    qint64 m_pageSize = 4096;
-    uint m_uid = 0;
-    QHash<QString, CpuCounters> m_previousCpu;
-    QHash<int, ProcessRecord> m_previousProcesses;
-    QHash<uint, QString> m_users;
-    QString m_cpuName;
+    int64_t m_pageSize = 4096;
+    uint32_t m_uid = 0;
+    std::unordered_map<std::string, CpuCounters> m_previousCpu;
+    std::unordered_map<int, ProcessRecord> m_previousProcesses;
+    std::unordered_map<uint32_t, std::string> m_users;
+    std::string m_cpuName;
     NetworkReader m_networks;
     DiskReader m_disks;
     GpuReader m_gpus;

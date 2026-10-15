@@ -3,22 +3,24 @@
 
 #pragma once
 
+#include "metrics.h"
 #include "processrecord.h"
 
-#include <QHash>
-#include <QPair>
-#include <QString>
-#include <QStringList>
-#include <QVariantMap>
-#include <QVector>
+#include <cstdint>
+#include <map>
+#include <string>
+#include <string_view>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 
 // One engine of a DRM client's fdinfo: busy time in nanoseconds, or busy
 // and total GPU cycles where the driver counts those instead.
 struct DrmEngine
 {
-    quint64 busyTime = 0;
-    quint64 cycles = 0;
-    quint64 totalCycles = 0;
+    uint64_t busyTime = 0;
+    uint64_t cycles = 0;
+    uint64_t totalCycles = 0;
     int capacity = 1;
     bool hasTime = false;
     bool hasCycles = false;
@@ -26,29 +28,30 @@ struct DrmEngine
 
 struct DrmClient
 {
-    QByteArray id;
-    QHash<QByteArray, DrmEngine> engines;
+    std::string id;
+    std::map<std::string, DrmEngine> engines;
 };
+
+using DrmClients = std::unordered_map<std::string, DrmClient>;
 
 class GpuReader
 {
 public:
-    GpuReader(const QString &procRoot, const QString &sysRoot);
+    GpuReader(std::string procRoot, std::string sysRoot);
 
-    void sample(QVariantMap *metrics, const QVector<ProcessRecord> &processes, double elapsed);
-    static DrmClient parseDrmFdinfo(const QByteArray &contents);
-    static double drmBusy(const QHash<QByteArray, DrmClient> &current,
-                          const QHash<QByteArray, DrmClient> &previous, double elapsedTime);
+    void sample(Metrics* metrics, const std::vector<ProcessRecord>& processes, double elapsed);
+    static DrmClient parseDrmFdinfo(std::string_view contents);
+    static double drmBusy(const DrmClients& current, const DrmClients& previous, double elapsedTime);
 
 private:
-    struct Gpu
+    struct Card
     {
-        QString device;
-        QString hwmon;
-        QString name;
-        QString driver;
-        QStringList nodes;
-        QHash<QByteArray, DrmClient> clients;
+        std::string device;
+        std::string hwmon;
+        std::string name;
+        std::string driver;
+        std::vector<std::string> nodes;
+        DrmClients clients;
         bool primary = false;
         bool hasBusy = false;
         bool hasClientBusy = false;
@@ -60,22 +63,22 @@ private:
     // The DRM descriptors a process held when they were last listed.
     struct Descriptors
     {
-        quint64 startTicks = 0;
-        QVector<QPair<QByteArray, int>> nodes;
+        uint64_t startTicks = 0;
+        std::vector<std::pair<std::string, int>> nodes;
     };
 
     void scan();
-    static QString pciName(const QByteArray &vendor, const QByteArray &device);
-    QVector<QPair<QByteArray, int>> drmDescriptors(const QString &path) const;
-    QVector<QHash<QByteArray, DrmClient>> drmClients(const QVector<ProcessRecord> &processes,
-                                                     const QVector<bool> &wanted);
+    static std::string pciName(std::string_view vendor, std::string_view device);
+    std::vector<std::pair<std::string, int>> drmDescriptors(const std::string& path) const;
+    std::vector<DrmClients> drmClients(const std::vector<ProcessRecord>& processes,
+                                       const std::vector<bool>& wanted);
 
-    QString m_procRoot;
-    QString m_sysRoot;
-    uint m_uid = 0;
-    QVector<Gpu> m_gpus;
-    QHash<QByteArray, int> m_nodeOwners;
-    QHash<int, Descriptors> m_descriptors;
-    quint64 m_samples = 0;
+    std::string m_procRoot;
+    std::string m_sysRoot;
+    uint32_t m_uid = 0;
+    std::vector<Card> m_cards;
+    std::unordered_map<std::string, int> m_nodeOwners;
+    std::unordered_map<int, Descriptors> m_descriptors;
+    uint64_t m_samples = 0;
     bool m_scanned = false;
 };

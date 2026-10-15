@@ -3,102 +3,132 @@
 
 #pragma once
 
-#include "processmodel.h"
+#include "metrics.h"
+#include "processlist.h"
+#include "base/signal.h"
 
-#include <QElapsedTimer>
-#include <QFutureWatcher>
-#include <QObject>
-#include <QTimer>
+#include "base/thread_pool.h"
+#include "base/timer.h"
+
+#include <chrono>
+#include <cstdint>
+#include <functional>
 #include <memory>
+#include <optional>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
-class DesktopEntry;
+class ProcReader;
+struct Snapshot;
 
-class Monitor : public QObject
+// A desktop entry as the monitor names processes after it.
+struct DesktopApplication
 {
-    Q_OBJECT
-    Q_CLASSINFO("D-Bus Interface", "com.cutefish.SystemMonitor")
-    Q_PROPERTY(QVariantMap metrics READ metrics NOTIFY updated)
-    Q_PROPERTY(QVariantMap history READ history NOTIFY updated)
-    Q_PROPERTY(ProcessFilter *processes READ processes CONSTANT)
-    Q_PROPERTY(ProcessFilter *applications READ applications CONSTANT)
-    Q_PROPERTY(int scope READ scope WRITE setScope NOTIFY scopeChanged)
-    Q_PROPERTY(bool ready READ ready NOTIFY updated)
-    Q_PROPERTY(QString error READ error NOTIFY updated)
-    Q_PROPERTY(int interval READ interval WRITE setInterval NOTIFY intervalChanged)
-    Q_PROPERTY(int historyDuration READ historyDuration CONSTANT)
+    std::string id;
+    std::string name;
+    std::string icon;
+    bool noDisplay = false;
+    bool hidden = false;
+};
 
+// Finds the desktop entries processes belong to.
+struct ApplicationLookup
+{
+    // The entry of a program, by its file name and path, as a window of it would be.
+    std::function<std::optional<DesktopApplication>(const std::string& name, const std::string& program)> resolve;
+    std::function<std::optional<DesktopApplication>(const std::string& id)> byId;
+};
+
+// The last minute of the system-wide measurements, one value per sample.
+struct History
+{
+    // Milliseconds since the monitor started.
+    std::vector<int64_t> timestamps;
+    std::vector<double> cpuPercent;
+    std::vector<double> memoryPercent;
+    std::vector<double> download;
+    std::vector<double> upload;
+    std::vector<double> diskRead;
+    std::vector<double> diskWrite;
+    std::vector<double> gpuPercent;
+    std::vector<double> gpuTemperature;
+};
+
+class Monitor
+{
 public:
-    explicit Monitor(QObject *parent = nullptr);
-    ~Monitor() override;
+    // Reads and writes its preferences in the file, when one is given.
+    explicit Monitor(ApplicationLookup lookup = {}, std::string preferences = {});
+    ~Monitor();
 
-    QVariantMap metrics() const;
-    QVariantMap history() const;
-    ProcessFilter *processes();
-    ProcessFilter *applications();
+    const Metrics& metrics() const { return m_metrics; }
+    const History& history() const { return m_history; }
+    ProcessList& processes() { return m_processes; }
+    ProcessList& applications() { return m_applications; }
     // Index of the process list's segment: applications, own processes, all processes.
-    int scope() const;
+    int scope() const { return m_scope; }
     void setScope(int scope);
-    bool ready() const;
-    QString error() const;
+    bool ready() const { return m_ready; }
+    const std::string& error() const { return m_error; }
+    // Milliseconds: 1000, 2000 or 5000.
     int interval() const;
     void setInterval(int interval);
-    int historyDuration() const;
+    int historyDuration() const { return 60; }
 
-    Q_INVOKABLE QVariantMap process(int pid, const QString &startTicks) const;
-    Q_INVOKABLE QString endProcess(int pid, const QString &startTicks, bool force);
-    Q_INVOKABLE QVariantMap application(int pid, const QString &startTicks) const;
-    Q_INVOKABLE QString endApplication(int pid, const QString &startTicks, bool force);
-    Q_INVOKABLE void sortBy(const QString &column);
-    Q_INVOKABLE QString formatBytes(double bytes) const;
-    Q_INVOKABLE QString formatRate(double bytes) const;
-    Q_INVOKABLE QString formatPercent(double percent) const;
-    Q_INVOKABLE QString formatTemperature(double celsius) const;
-    Q_INVOKABLE void copyText(const QString &text);
-    static QString signalProcess(int pid, quint64 startTicks, bool force);
+    // The process, or application led by it, while it is the one that started then.
+    const ProcessRecord* process(int pid, uint64_t startTicks) const;
+    const ProcessRecord* application(int pid, uint64_t startTicks) const;
+    static bool canManage(const ProcessRecord& process);
+    // An error message, or empty once the signal went out.
+    std::string endProcess(int pid, uint64_t startTicks, bool force);
+    std::string endApplication(int pid, uint64_t startTicks, bool force);
+    static std::string signalProcess(int pid, uint64_t startTicks, bool force);
+    void sortBy(const std::string& column);
+    // Desktop entries changed: processes are named again.
+    void applicationsChanged();
 
-public slots:
-    void activateWindow();
+    static std::string formatBytes(double bytes);
+    static std::string formatRate(double bytes);
+    static std::string formatPercent(double percent);
+    static std::string formatTemperature(double celsius);
 
-signals:
-    void updated();
-    void intervalChanged();
-    void scopeChanged();
-    void activationRequested();
-    void copyRequested(const QString &text);
+    // After every published sample, and after the interval changed.
+    cutefish::base::Signal<> updated;
+    cutefish::base::Signal<> intervalChanged;
+    cutefish::base::Signal<> scopeChanged;
 
 private:
-    void savePreferences() const;
-    void sample();
-    void acceptSample();
-    void identify(ProcessRecord *process);
-    QVector<ProcessRecord> groupApplications(const QVector<ProcessRecord> &processes);
-    static bool canManage(const ProcessRecord &process);
-
     struct Application
     {
-        QString id;
-        QString name;
-        QString icon;
+        std::string id;
+        std::string name;
+        std::string icon;
     };
 
-    static Application describeEntry(DesktopEntry *entry);
+    void savePreferences() const;
+    void sample();
+    void acceptSample(Snapshot snapshot);
+    void identify(ProcessRecord* process);
+    std::vector<ProcessRecord> groupApplications(const std::vector<ProcessRecord>& processes);
+    static Application describeEntry(const std::optional<DesktopApplication>& entry);
 
-    ProcessModel m_model;
-    ProcessFilter m_filter;
-    ProcessModel m_applicationModel;
-    ProcessFilter m_applicationFilter;
+    ApplicationLookup m_lookup;
+    std::string m_preferences;
+    ProcessList m_processes;
+    ProcessList m_applications;
     int m_scope = 1;
-    QHash<QString, Application> m_applicationIds;
+    std::unordered_map<std::string, Application> m_applicationIds;
+    std::unordered_map<std::string, Application> m_programs;
     std::shared_ptr<ProcReader> m_reader;
-    QFutureWatcher<Snapshot> m_watcher;
-    QFutureWatcher<QVariantList> m_volumeWatcher;
-    QVariantList m_volumes;
-    QHash<QString, Application> m_applications;
-    QTimer m_timer;
-    QVariantMap m_metrics;
-    QHash<QString, QVariantList> m_history;
-    QVariantList m_historyTimes;
-    QElapsedTimer m_historyClock;
-    QString m_error;
+    cutefish::base::Job m_sampleJob;
+    cutefish::base::Job m_volumeJob;
+    std::vector<Volume> m_volumes;
+    cutefish::base::Timer m_timer;
+    cutefish::base::Timer m_baselineTimer;
+    Metrics m_metrics;
+    History m_history;
+    std::chrono::steady_clock::time_point m_historyClock = std::chrono::steady_clock::now();
+    std::string m_error;
     bool m_ready = false;
 };

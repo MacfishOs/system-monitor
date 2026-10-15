@@ -1,68 +1,98 @@
 // SPDX-FileCopyrightText: 2026 Reion Wong <reionwong@gmail.com>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "cutefishapplication.h"
-#include "historygraph.h"
+#include "icons.h"
 #include "monitor.h"
+#include "preferences.h"
+#include "views/mainwindow.h"
 
-#include <QClipboard>
-#include <QCommandLineParser>
-#include <QDBusConnection>
-#include <QDBusInterface>
-#include <QFile>
-#include <QGuiApplication>
-#include <QIcon>
-#include <QQmlApplicationEngine>
-#include <QQmlContext>
-#include <QQuickWindow>
+#include "base/application_registry.h"
+#include "base/dbus.h"
+#include "ui/application.h"
+#include "ui/icon.h"
 
-int cutefish_application_main(int argc, char *argv[])
+#include <chrono>
+#include <cstdio>
+#include <cstring>
+#include <string>
+
+using namespace cutefish;
+
+static const char* const kService = "com.cutefish.SystemMonitor";
+static const char* const kPath = "/SystemMonitor";
+
+// As the Qt version's command line: --help and --version, nothing else.
+static int parseArguments(int argc, char** argv, bool* quit)
 {
-    Q_UNUSED(argc);
-    Q_UNUSED(argv);
+    *quit = false;
+    for (int i = 1; i < argc; ++i) {
+        const std::string argument = argv[i];
+        if (argument == "-h" || argument == "--help" || argument == "-?") {
+            std::printf("Usage: %s [options]\nCutefish System Monitor\n\nOptions:\n"
+                        "  -h, --help     Displays help on commandline options.\n"
+                        "  -v, --version  Displays version information.\n",
+                        argv[0]);
+            *quit = true;
+            return 0;
+        }
+        if (argument == "-v" || argument == "--version") {
+            std::printf("cutefish-system-monitor %s\n", SYSTEM_MONITOR_VERSION);
+            *quit = true;
+            return 0;
+        }
+        std::fprintf(stderr, "Unknown option '%s'.\n", argument.substr(argument.find_first_not_of('-')).c_str());
+        *quit = true;
+        return 1;
+    }
+    return 0;
+}
 
-    QGuiApplication &app = *qGuiApp;
-    app.setApplicationName(QStringLiteral("cutefish-system-monitor"));
-    app.setApplicationVersion(QStringLiteral(SYSTEM_MONITOR_VERSION));
-    app.setDesktopFileName(QStringLiteral("cutefish-system-monitor"));
-    app.setWindowIcon(QIcon::fromTheme(QStringLiteral("utilities-system-monitor")));
+int main(int argc, char** argv)
+{
+    bool quit = false;
+    const int status = parseArguments(argc, argv, &quit);
+    if (quit)
+        return status;
 
-    QCommandLineParser parser;
-    parser.setApplicationDescription(QStringLiteral("Cutefish System Monitor"));
-    parser.addHelpOption();
-    parser.addVersionOption();
-    parser.process(app);
+    ui::Application app(argc, argv);
+    app.setApplicationId("cutefish-system-monitor");
+    for (const auto& [name, svg] : embeddedIcons())
+        ui::Icon::registerGlyph(std::string(name), std::string(svg));
 
-    auto bus = QDBusConnection::sessionBus();
-    const QString service = QStringLiteral("com.cutefish.SystemMonitor");
-    const QString path = QStringLiteral("/SystemMonitor");
-    if (bus.isConnected() && !bus.registerService(service)) {
-        QDBusInterface existing(service, path, service, bus);
-        existing.setTimeout(1500);
-        existing.call(QStringLiteral("activateWindow"));
+    base::dbus::Connection* bus = app.sessionBus();
+    if (bus && !bus->requestName(kService)) {
+        base::dbus::Proxy running(bus, kService, kPath, kService);
+        running.setTimeout(std::chrono::milliseconds(1500));
+        running.call("activateWindow");
         return 0;
     }
 
-    qmlRegisterType<HistoryGraph>("Cutefish.SystemMonitor", 1, 0, "HistoryGraph");
-    qmlRegisterUncreatableType<ProcessFilter>("Cutefish.SystemMonitor", 1, 0, "ProcessFilter",
-                                            QStringLiteral("Provided by Monitor"));
+    base::ApplicationRegistry& registry = base::ApplicationRegistry::instance();
+    ApplicationLookup lookup;
+    lookup.resolve = [&registry](const std::string& name, const std::string& program) -> std::optional<DesktopApplication> {
+        const auto entry = registry.resolveWindow(name, {}, program, name);
+        if (!entry)
+            return std::nullopt;
+        return DesktopApplication{entry->id, entry->name, entry->icon, entry->noDisplay, entry->hidden};
+    };
+    lookup.byId = [&registry](const std::string& id) -> std::optional<DesktopApplication> {
+        const auto entry = registry.byId(id);
+        if (!entry)
+            return std::nullopt;
+        return DesktopApplication{entry->id, entry->name, entry->icon, entry->noDisplay, entry->hidden};
+    };
 
-    Monitor monitor;
-    QObject::connect(&monitor, &Monitor::copyRequested, app.clipboard(), [](const QString &text) {
-        QGuiApplication::clipboard()->setText(text);
-    });
-    bus.registerObject(path, &monitor, QDBusConnection::ExportAllSlots);
-    QQmlApplicationEngine engine;
-    engine.rootContext()->setContextProperty(QStringLiteral("Monitor"), &monitor);
-    engine.load(QUrl(QStringLiteral("qrc:/qml/Main.qml")));
-    if (engine.rootObjects().isEmpty())
-        return 1;
+    Monitor monitor(lookup, Preferences::defaultPath());
+    const base::Subscription applications = registry.changed.connect([&monitor] { monitor.applicationsChanged(); });
+    MainWindow window(monitor);
 
-    auto window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
-    QObject::connect(&monitor, &Monitor::activationRequested, window, [window] {
-        window->show();
-        window->raise();
-        window->requestActivate();
-    });
-    return app.exec();
+    std::unique_ptr<base::dbus::Object> service;
+    if (bus) {
+        service = std::make_unique<base::dbus::Object>(bus, kPath, kService);
+        service->addMethod("activateWindow", [&window] { window.activate(); });
+        service->publish();
+    }
+
+    window.window().show();
+    return app.run();
 }

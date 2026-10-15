@@ -3,20 +3,22 @@
 
 #pragma once
 
-#include <QHash>
-#include <QPair>
-#include <QString>
-#include <QVariantMap>
+#include "metrics.h"
+
+#include <cstdint>
+#include <string>
+#include <unordered_map>
+#include <utility>
 
 class NetworkReader
 {
 public:
-    NetworkReader(const QString &procRoot, const QString &sysRoot);
+    NetworkReader(std::string procRoot, std::string sysRoot);
 
-    void sample(QVariantMap *metrics, double elapsed);
+    void sample(Metrics* metrics, double elapsed);
 
 private:
-    QString m_procRoot;
-    QString m_sysRoot;
-    QHash<QString, QPair<quint64, quint64>> m_previous;
+    std::string m_procRoot;
+    std::string m_sysRoot;
+    std::unordered_map<std::string, std::pair<uint64_t, uint64_t>> m_previous;
 };

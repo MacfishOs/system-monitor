@@ -3,38 +3,38 @@
 
 #pragma once
 
-#include <QString>
-
+#include <cstdint>
+#include <string>
 #include <vector>
 
 struct ProcessRecord
 {
     int pid = 0;
     int parentPid = 0;
-    uint uid = 0;
-    QString name;
-    QString displayName;
-    QString iconName;
-    QString user;
-    QString command;
-    QString executable;
-    QString program;
-    QString scopeId;
+    uint32_t uid = 0;
+    std::string name;
+    std::string displayName;
+    std::string iconName;
+    std::string user;
+    std::string command;
+    std::string executable;
+    std::string program;
+    std::string scopeId;
     // Chromium's helper process type, such as renderer; empty for other processes.
-    QString helperType;
-    QString appId;
-    QString state;
+    std::string helperType;
+    std::string appId;
+    std::string state;
     int threads = 0;
     int nice = 0;
-    quint64 startTicks = 0;
-    quint64 cpuTicks = 0;
-    quint64 rss = 0;
+    uint64_t startTicks = 0;
+    uint64_t cpuTicks = 0;
+    uint64_t rss = 0;
     // PSS when it could be read, resident memory otherwise.
-    quint64 memory = 0;
-    quint64 readBytes = 0;
-    quint64 writeBytes = 0;
-    quint64 pss = 0;
-    qint64 pssTime = 0;
+    uint64_t memory = 0;
+    uint64_t readBytes = 0;
+    uint64_t writeBytes = 0;
+    uint64_t pss = 0;
+    int64_t pssTime = 0;
     bool pssAvailable = false;
     bool ioAvailable = false;
     bool kernelThread = false;

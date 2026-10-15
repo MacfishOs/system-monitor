@@ -4,18 +4,49 @@
 #include "gpureader.h"
 #include "fileutil.h"
 
-#include <QDir>
-#include <QFile>
-#include <QFileInfo>
-#include <QRegularExpression>
-
 #include <algorithm>
+#include <cmath>
 #include <dirent.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
-GpuReader::GpuReader(const QString &procRoot, const QString &sysRoot)
-    : m_procRoot(procRoot)
-    , m_sysRoot(sysRoot)
+static bool isDirectory(const std::string& path)
+{
+    struct stat info;
+    return stat(path.c_str(), &info) == 0 && S_ISDIR(info.st_mode);
+}
+
+// Subdirectories, by name.
+static std::vector<std::string> subdirectories(const std::string& path)
+{
+    std::vector<std::string> names;
+    for (std::string& name : directoryEntries(path)) {
+        if (isDirectory(path + '/' + name))
+            names.push_back(std::move(name));
+    }
+    std::sort(names.begin(), names.end());
+    return names;
+}
+
+static bool isCard(std::string_view name)
+{
+    return name.size() > 4 && name.starts_with("card")
+           && std::all_of(name.begin() + 4, name.end(), [](char c) { return c >= '0' && c <= '9'; });
+}
+
+static std::string lower(std::string_view text)
+{
+    std::string result(text);
+    for (char& c : result) {
+        if (c >= 'A' && c <= 'Z')
+            c = char(c - 'A' + 'a');
+    }
+    return result;
+}
+
+GpuReader::GpuReader(std::string procRoot, std::string sysRoot)
+    : m_procRoot(std::move(procRoot))
+    , m_sysRoot(std::move(sysRoot))
     , m_uid(getuid())
 {
 }
@@ -23,69 +54,67 @@ GpuReader::GpuReader(const QString &procRoot, const QString &sysRoot)
 void GpuReader::scan()
 {
     m_scanned = true;
-    static const QRegularExpression card(QStringLiteral("^card[0-9]+$"));
-    const QDir drm(m_sysRoot + QStringLiteral("/class/drm"));
-    for (const QString &entry : drm.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name)) {
-        if (!card.match(entry).hasMatch())
+    const std::string drm = m_sysRoot + "/class/drm";
+    for (const std::string& entry : subdirectories(drm)) {
+        if (!isCard(entry))
             continue;
 
-        Gpu gpu;
-        gpu.device = drm.filePath(entry) + QStringLiteral("/device");
-        const QDir hwmon(gpu.device + QStringLiteral("/hwmon"));
-        const QStringList monitors = hwmon.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
-        if (!monitors.isEmpty())
-            gpu.hwmon = hwmon.filePath(monitors.first());
-        gpu.hasBusy = QFileInfo::exists(gpu.device + QStringLiteral("/gpu_busy_percent"));
-        gpu.hasTemperature = !gpu.hwmon.isEmpty() && QFileInfo::exists(gpu.hwmon + QStringLiteral("/temp1_input"));
-        gpu.hasFrequency = !gpu.hwmon.isEmpty() && QFileInfo::exists(gpu.hwmon + QStringLiteral("/freq1_input"));
-        gpu.hasVram = QFileInfo::exists(gpu.device + QStringLiteral("/mem_info_vram_total"));
-        gpu.nodes = QDir(gpu.device + QStringLiteral("/drm")).entryList({ QStringLiteral("card*"), QStringLiteral("renderD*") },
-                                                                        QDir::Dirs | QDir::NoDotAndDotDot);
-        if (!gpu.hasBusy && !gpu.hasTemperature && gpu.nodes.isEmpty())
+        Card card;
+        card.device = drm + '/' + entry + "/device";
+        const auto monitors = subdirectories(card.device + "/hwmon");
+        if (!monitors.empty())
+            card.hwmon = card.device + "/hwmon/" + monitors.front();
+        card.hasBusy = fileExists(card.device + "/gpu_busy_percent");
+        card.hasTemperature = !card.hwmon.empty() && fileExists(card.hwmon + "/temp1_input");
+        card.hasFrequency = !card.hwmon.empty() && fileExists(card.hwmon + "/freq1_input");
+        card.hasVram = fileExists(card.device + "/mem_info_vram_total");
+        for (const std::string& node : subdirectories(card.device + "/drm")) {
+            if (node.starts_with("card") || node.starts_with("renderD"))
+                card.nodes.push_back(node);
+        }
+        if (!card.hasBusy && !card.hasTemperature && card.nodes.empty())
             continue;
 
-        gpu.primary = readFile(gpu.device + QStringLiteral("/boot_vga")).trimmed() == "1";
-        gpu.driver = QFileInfo(QFileInfo(gpu.device + QStringLiteral("/driver")).symLinkTarget()).fileName();
-        gpu.name = QString::fromUtf8(readFile(gpu.device + QStringLiteral("/product_name")).trimmed());
-        if (gpu.name.isEmpty())
-            gpu.name = pciName(readFile(gpu.device + QStringLiteral("/vendor")).trimmed(),
-                               readFile(gpu.device + QStringLiteral("/device")).trimmed());
-        if (gpu.name.isEmpty())
-            gpu.name = gpu.driver.isEmpty() ? entry : gpu.driver;
-        m_gpus.append(gpu);
+        card.primary = trimmed(readFile(card.device + "/boot_vga")) == "1";
+        card.driver = validUtf8(fileName(symLinkTarget(card.device + "/driver")));
+        card.name = validUtf8(trimmed(readFile(card.device + "/product_name")));
+        if (card.name.empty())
+            card.name = pciName(trimmed(readFile(card.device + "/vendor")), trimmed(readFile(card.device + "/device")));
+        if (card.name.empty())
+            card.name = card.driver.empty() ? entry : card.driver;
+        m_cards.push_back(std::move(card));
     }
-    std::stable_sort(m_gpus.begin(), m_gpus.end(), [](const Gpu &left, const Gpu &right) {
-        return left.primary && !right.primary;
-    });
-    for (int index = 0; index < m_gpus.size(); ++index) {
-        if (m_gpus[index].hasBusy)
+    std::stable_sort(m_cards.begin(), m_cards.end(),
+                     [](const Card& left, const Card& right) { return left.primary && !right.primary; });
+    for (size_t index = 0; index < m_cards.size(); ++index) {
+        if (m_cards[index].hasBusy)
             continue;
-        for (const QString &node : std::as_const(m_gpus[index].nodes))
-            m_nodeOwners.insert("/dev/dri/" + QFile::encodeName(node), index);
+        for (const std::string& node : m_cards[index].nodes)
+            m_nodeOwners.emplace("/dev/dri/" + node, int(index));
     }
 }
 
-QString GpuReader::pciName(const QByteArray &vendor, const QByteArray &device)
+std::string GpuReader::pciName(std::string_view vendor, std::string_view device)
 {
-    const QByteArray vendorId = vendor.startsWith("0x") ? vendor.mid(2).toLower() : vendor.toLower();
-    const QByteArray deviceId = device.startsWith("0x") ? device.mid(2).toLower() : device.toLower();
+    const std::string vendorId = lower(vendor.starts_with("0x") ? vendor.substr(2) : vendor);
+    const std::string deviceId = lower(device.starts_with("0x") ? device.substr(2) : device);
     if (vendorId.size() != 4 || deviceId.size() != 4)
         return {};
 
-    for (const QString &path : { QStringLiteral("/usr/share/misc/pci.ids"), QStringLiteral("/usr/share/hwdata/pci.ids") }) {
-        const QByteArray ids = readFile(path);
-        if (ids.isEmpty())
+    for (const char* path : {"/usr/share/misc/pci.ids", "/usr/share/hwdata/pci.ids"}) {
+        const std::string ids = readFile(path);
+        if (ids.empty())
             continue;
         bool inVendor = false;
-        for (const QByteArray &line : ids.split('\n')) {
-            if (line.isEmpty() || line.startsWith('#'))
+        for (const std::string_view line : split(ids, '\n')) {
+            if (line.empty() || line.starts_with('#'))
                 continue;
-            if (line.at(0) != '\t') {
+            if (line[0] != '\t') {
                 if (inVendor)
                     return {};
-                inVendor = line.startsWith(vendorId + "  ");
-            } else if (inVendor && line.startsWith("\t" + deviceId + "  ")) {
-                return QString::fromUtf8(line.mid(7).trimmed());
+                inVendor = line.starts_with(vendorId + "  ");
+            } else if (inVendor && line.starts_with("\t" + deviceId + "  ")) {
+                return validUtf8(trimmed(line.substr(7)));
             }
         }
         return {};
@@ -93,210 +122,207 @@ QString GpuReader::pciName(const QByteArray &vendor, const QByteArray &device)
     return {};
 }
 
-DrmClient GpuReader::parseDrmFdinfo(const QByteArray &contents)
+DrmClient GpuReader::parseDrmFdinfo(std::string_view contents)
 {
     DrmClient client;
-    QHash<QByteArray, int> capacities;
-    for (const QByteArray &line : contents.split('\n')) {
-        const int colon = line.indexOf(':');
-        if (colon < 0)
+    std::map<std::string, int> capacities;
+    for (const std::string_view line : split(contents, '\n')) {
+        const size_t colon = line.find(':');
+        if (colon == std::string_view::npos)
             continue;
-        const QByteArray key = line.left(colon);
-        const QByteArray value = splitFields(line.mid(colon + 1)).value(0);
+        const std::string_view key = line.substr(0, colon);
+        const auto values = splitFields(line.substr(colon + 1));
+        const std::string_view value = values.empty() ? std::string_view() : values.front();
         if (key == "drm-client-id") {
-            client.id = value;
+            client.id = std::string(value);
             continue;
         }
 
-        bool valid = false;
-        const quint64 number = value.toULongLong(&valid);
-        if (!valid)
+        uint64_t number = 0;
+        if (!parseNumber(value, &number))
             continue;
-        if (key.startsWith("drm-engine-capacity-")) {
-            capacities.insert(key.mid(20), qMax(1, int(number)));
-        } else if (key.startsWith("drm-engine-")) {
-            DrmEngine &engine = client.engines[key.mid(11)];
+        if (key.starts_with("drm-engine-capacity-")) {
+            capacities[std::string(key.substr(20))] = std::max(1, int(number));
+        } else if (key.starts_with("drm-engine-")) {
+            DrmEngine& engine = client.engines[std::string(key.substr(11))];
             engine.busyTime = number;
             engine.hasTime = true;
-        } else if (key.startsWith("drm-total-cycles-")) {
-            client.engines[key.mid(17)].totalCycles = number;
-        } else if (key.startsWith("drm-cycles-")) {
-            DrmEngine &engine = client.engines[key.mid(11)];
+        } else if (key.starts_with("drm-total-cycles-")) {
+            client.engines[std::string(key.substr(17))].totalCycles = number;
+        } else if (key.starts_with("drm-cycles-")) {
+            DrmEngine& engine = client.engines[std::string(key.substr(11))];
             engine.cycles = number;
             engine.hasCycles = true;
         }
     }
-    for (auto engine = client.engines.begin(); engine != client.engines.end(); ++engine)
-        engine->capacity = capacities.value(engine.key(), 1);
+    for (auto& [name, engine] : client.engines) {
+        const auto capacity = capacities.find(name);
+        engine.capacity = capacity == capacities.end() ? 1 : capacity->second;
+    }
     return client;
 }
 
-double GpuReader::drmBusy(const QHash<QByteArray, DrmClient> &current,
-                           const QHash<QByteArray, DrmClient> &previous, double elapsedTime)
+double GpuReader::drmBusy(const DrmClients& current, const DrmClients& previous, double elapsedTime)
 {
-    QHash<QByteArray, double> loads;
-    QHash<QByteArray, int> capacities;
-    for (auto client = current.cbegin(); client != current.cend(); ++client) {
+    std::map<std::string, double> loads;
+    std::map<std::string, int> capacities;
+    for (const auto& [key, client] : current) {
         // A new client's counters include work done before the interval.
-        const auto earlier = previous.constFind(client.key());
-        if (earlier == previous.cend())
+        const auto earlier = previous.find(key);
+        if (earlier == previous.end())
             continue;
 
-        for (auto engine = client->engines.cbegin(); engine != client->engines.cend(); ++engine) {
-            const DrmEngine before = earlier->engines.value(engine.key());
+        for (const auto& [name, engine] : client.engines) {
+            const auto found = earlier->second.engines.find(name);
+            const DrmEngine before = found == earlier->second.engines.end() ? DrmEngine() : found->second;
             double load = 0;
-            if (engine->hasCycles && before.hasCycles && engine->totalCycles > before.totalCycles)
-                load = double(counterDelta(engine->cycles, before.cycles)) / (engine->totalCycles - before.totalCycles);
-            else if (engine->hasTime && before.hasTime && elapsedTime > 0)
-                load = counterDelta(engine->busyTime, before.busyTime) / elapsedTime;
-            loads[engine.key()] += load;
-            capacities[engine.key()] = qMax(capacities.value(engine.key(), 1), engine->capacity);
+            if (engine.hasCycles && before.hasCycles && engine.totalCycles > before.totalCycles)
+                load = double(counterDelta(engine.cycles, before.cycles)) / (engine.totalCycles - before.totalCycles);
+            else if (engine.hasTime && before.hasTime && elapsedTime > 0)
+                load = counterDelta(engine.busyTime, before.busyTime) / elapsedTime;
+            loads[name] += load;
+            const auto capacity = capacities.find(name);
+            capacities[name] = std::max(capacity == capacities.end() ? 1 : capacity->second, engine.capacity);
         }
     }
 
     // The busiest engine sets the GPU's activity.
     double busy = 0;
-    for (auto load = loads.cbegin(); load != loads.cend(); ++load)
-        busy = qMax(busy, load.value() / capacities.value(load.key()));
-    return qBound(0.0, 100.0 * busy, 100.0);
+    for (const auto& [name, load] : loads)
+        busy = std::max(busy, load / capacities[name]);
+    return std::clamp(100.0 * busy, 0.0, 100.0);
 }
 
-QVector<QPair<QByteArray, int>> GpuReader::drmDescriptors(const QString &path) const
+std::vector<std::pair<std::string, int>> GpuReader::drmDescriptors(const std::string& path) const
 {
-    QVector<QPair<QByteArray, int>> nodes;
-    DIR *descriptors = opendir(QFile::encodeName(path + QStringLiteral("/fd")).constData());
+    std::vector<std::pair<std::string, int>> nodes;
+    DIR* descriptors = opendir((path + "/fd").c_str());
     if (!descriptors)
         return nodes;
-    while (const dirent *entry = readdir(descriptors)) {
+    while (const dirent* entry = readdir(descriptors)) {
         char target[256];
         const ssize_t length = readlinkat(dirfd(descriptors), entry->d_name, target, sizeof(target));
-        if (length <= 0 || length == sizeof(target))
+        if (length <= 0 || size_t(length) == sizeof(target))
             continue;
-        const auto owner = m_nodeOwners.constFind(QByteArray(target, length));
-        if (owner != m_nodeOwners.cend())
-            nodes.append({ QByteArray(entry->d_name), *owner });
+        const auto owner = m_nodeOwners.find(std::string(target, size_t(length)));
+        if (owner != m_nodeOwners.end())
+            nodes.emplace_back(entry->d_name, owner->second);
     }
     closedir(descriptors);
     return nodes;
 }
 
-QVector<QHash<QByteArray, DrmClient>> GpuReader::drmClients(const QVector<ProcessRecord> &processes,
-                                                             const QVector<bool> &wanted)
+std::vector<DrmClients> GpuReader::drmClients(const std::vector<ProcessRecord>& processes,
+                                              const std::vector<bool>& wanted)
 {
-    QVector<QHash<QByteArray, DrmClient>> clients(m_gpus.size());
-    if (!wanted.contains(true))
+    std::vector<DrmClients> clients(m_cards.size());
+    if (std::find(wanted.begin(), wanted.end(), true) == wanted.end())
         return clients;
 
     ++m_samples;
-    QHash<int, Descriptors> listed;
-    for (const ProcessRecord &process : processes) {
+    std::unordered_map<int, Descriptors> listed;
+    for (const ProcessRecord& process : processes) {
         // Another user's descriptors cannot be inspected.
         if (process.uid != m_uid || process.kernelThread)
             continue;
 
         // Listing descriptors costs about 10 µs each, so a process's are listed
         // when it appears and every fifth sample after, spread across processes.
-        const QString path = m_procRoot + QLatin1Char('/') + QString::number(process.pid);
-        Descriptors descriptors = m_descriptors.value(process.pid);
-        if (descriptors.startTicks != process.startTicks || (m_samples + process.pid) % 5 == 0)
-            descriptors = { process.startTicks, drmDescriptors(path) };
-        listed.insert(process.pid, descriptors);
+        const std::string path = m_procRoot + '/' + std::to_string(process.pid);
+        const auto known = m_descriptors.find(process.pid);
+        Descriptors descriptors = known == m_descriptors.end() ? Descriptors() : known->second;
+        if (descriptors.startTicks != process.startTicks || (m_samples + uint64_t(process.pid)) % 5 == 0)
+            descriptors = {process.startTicks, drmDescriptors(path)};
 
-        for (const auto &[descriptor, gpu] : std::as_const(descriptors.nodes)) {
-            if (!wanted[gpu])
+        for (const auto& [descriptor, card] : descriptors.nodes) {
+            if (!wanted[size_t(card)])
                 continue;
             // A closed descriptor's number may now name another file, which has no DRM fdinfo.
-            const DrmClient client = parseDrmFdinfo(readFile(path + QStringLiteral("/fdinfo/") + QString::fromLatin1(descriptor)));
-            if (client.engines.isEmpty())
+            DrmClient client = parseDrmFdinfo(readFile(path + "/fdinfo/" + descriptor));
+            if (client.engines.empty())
                 continue;
             // Descriptors shared through fork or dup belong to one client.
-            const QByteArray key = client.id.isEmpty() ? QByteArray::number(process.pid) + ':' + descriptor : client.id;
-            clients[gpu].insert(key, client);
+            const std::string key = client.id.empty() ? std::to_string(process.pid) + ':' + descriptor : client.id;
+            clients[size_t(card)][key] = std::move(client);
         }
+        listed[process.pid] = std::move(descriptors);
     }
-    m_descriptors = listed;
+    m_descriptors = std::move(listed);
     return clients;
 }
 
-void GpuReader::sample(QVariantMap *metrics, const QVector<ProcessRecord> &processes, double elapsed)
+void GpuReader::sample(Metrics* metrics, const std::vector<ProcessRecord>& processes, double elapsed)
 {
     if (!m_scanned)
         scan();
 
     // Reading a runtime-suspended GPU's counters would wake it up.
-    QVector<bool> active(m_gpus.size());
-    QVector<bool> clientCounted(m_gpus.size());
-    for (int index = 0; index < m_gpus.size(); ++index) {
-        const Gpu &gpu = m_gpus[index];
-        active[index] = readFile(gpu.device + QStringLiteral("/power/runtime_status")).trimmed() != "suspended";
-        clientCounted[index] = active[index] && !gpu.hasBusy && !gpu.nodes.isEmpty();
+    std::vector<bool> active(m_cards.size());
+    std::vector<bool> clientCounted(m_cards.size());
+    for (size_t index = 0; index < m_cards.size(); ++index) {
+        const Card& card = m_cards[index];
+        active[index] = trimmed(readFile(card.device + "/power/runtime_status")) != "suspended";
+        clientCounted[index] = active[index] && !card.hasBusy && !card.nodes.empty();
     }
-    const auto clients = drmClients(processes, clientCounted);
+    auto clients = drmClients(processes, clientCounted);
 
-    QVariantList gpus;
-    for (int index = 0; index < m_gpus.size(); ++index) {
-        Gpu &gpu = m_gpus[index];
+    std::vector<Gpu> gpus;
+    for (size_t index = 0; index < m_cards.size(); ++index) {
+        Card& card = m_cards[index];
         int busy = 0;
         // Without a device-wide counter, activity sums the busy time that
         // DRM fdinfo reports for each of the user's clients.
         if (clientCounted[index]) {
-            if (!clients[index].isEmpty())
-                gpu.hasClientBusy = true;
-            busy = qRound(drmBusy(clients[index], gpu.clients, elapsed * 1e9));
-            gpu.clients = clients[index];
+            if (!clients[index].empty())
+                card.hasClientBusy = true;
+            busy = int(std::lround(drmBusy(clients[index], card.clients, elapsed * 1e9)));
+            card.clients = std::move(clients[index]);
         }
-        if (!gpu.hasBusy && !gpu.hasClientBusy && !gpu.hasTemperature)
+        if (!card.hasBusy && !card.hasClientBusy && !card.hasTemperature)
             continue;
 
-        const bool hasBusy = gpu.hasBusy || gpu.hasClientBusy;
-        bool valid = false;
-        double temperature = -1;
-        double frequency = 0;
-        quint64 vramUsed = 0;
-        quint64 vramTotal = 0;
-        if (active[index] && gpu.hasBusy)
-            busy = qBound(0, readFile(gpu.device + QStringLiteral("/gpu_busy_percent")).trimmed().toInt(), 100);
-        if (active[index] && gpu.hasTemperature) {
-            const qint64 value = readFile(gpu.hwmon + QStringLiteral("/temp1_input")).trimmed().toLongLong(&valid);
-            if (valid)
-                temperature = value / 1000.0;
+        Gpu gpu;
+        gpu.name = card.name;
+        gpu.driver = card.driver;
+        gpu.active = active[index];
+        gpu.hasBusy = card.hasBusy || card.hasClientBusy;
+        gpu.hasTemperature = card.hasTemperature;
+        gpu.hasFrequency = card.hasFrequency;
+        gpu.hasVram = card.hasVram;
+        if (active[index] && card.hasBusy) {
+            int64_t value = 0;
+            parseNumber(trimmed(readFile(card.device + "/gpu_busy_percent")), &value);
+            busy = int(std::clamp<int64_t>(value, 0, 100));
         }
-        if (active[index] && gpu.hasFrequency)
-            frequency = readFile(gpu.hwmon + QStringLiteral("/freq1_input")).trimmed().toULongLong() / 1e6;
-        if (active[index] && gpu.hasVram) {
-            vramUsed = readFile(gpu.device + QStringLiteral("/mem_info_vram_used")).trimmed().toULongLong();
-            vramTotal = readFile(gpu.device + QStringLiteral("/mem_info_vram_total")).trimmed().toULongLong();
+        gpu.busy = busy;
+        if (active[index] && card.hasTemperature) {
+            int64_t value = 0;
+            if (parseNumber(trimmed(readFile(card.hwmon + "/temp1_input")), &value))
+                gpu.temperature = value / 1000.0;
         }
-        gpus.append(QVariantMap {
-            { QStringLiteral("name"), gpu.name },
-            { QStringLiteral("driver"), gpu.driver },
-            { QStringLiteral("active"), active[index] },
-            { QStringLiteral("hasBusy"), hasBusy },
-            { QStringLiteral("busy"), busy },
-            { QStringLiteral("hasTemperature"), gpu.hasTemperature },
-            { QStringLiteral("temperature"), temperature },
-            { QStringLiteral("hasFrequency"), gpu.hasFrequency },
-            { QStringLiteral("frequency"), frequency },
-            { QStringLiteral("hasVram"), gpu.hasVram },
-            { QStringLiteral("vramUsed"), vramUsed },
-            { QStringLiteral("vramTotal"), vramTotal }
-        });
+        if (active[index] && card.hasFrequency)
+            gpu.frequency = toUnsigned(trimmed(readFile(card.hwmon + "/freq1_input"))) / 1e6;
+        if (active[index] && card.hasVram) {
+            gpu.vramUsed = toUnsigned(trimmed(readFile(card.device + "/mem_info_vram_used")));
+            gpu.vramTotal = toUnsigned(trimmed(readFile(card.device + "/mem_info_vram_total")));
+        }
+        gpus.push_back(std::move(gpu));
     }
 
     // The overview follows the primary GPU, or the first one with an activity counter.
-    QVariantMap main = gpus.value(0).toMap();
-    for (const QVariant &gpu : std::as_const(gpus)) {
-        if (gpu.toMap().value(QStringLiteral("hasBusy")).toBool()) {
-            if (!main.value(QStringLiteral("hasBusy")).toBool())
-                main = gpu.toMap();
+    const Gpu* main = gpus.empty() ? nullptr : &gpus.front();
+    for (const Gpu& gpu : gpus) {
+        if (gpu.hasBusy) {
+            if (!main->hasBusy)
+                main = &gpu;
             break;
         }
     }
-    metrics->insert(QStringLiteral("gpus"), gpus);
-    metrics->insert(QStringLiteral("gpuAvailable"), !gpus.isEmpty());
-    metrics->insert(QStringLiteral("gpuName"), main.value(QStringLiteral("name")).toString());
-    metrics->insert(QStringLiteral("gpuHasBusy"), main.value(QStringLiteral("hasBusy")).toBool());
-    metrics->insert(QStringLiteral("gpuHasTemperature"), main.value(QStringLiteral("hasTemperature")).toBool());
-    metrics->insert(QStringLiteral("gpuPercent"), main.value(QStringLiteral("busy")).toDouble());
-    metrics->insert(QStringLiteral("gpuTemperature"), qMax(0.0, main.value(QStringLiteral("temperature")).toDouble()));
+    metrics->gpuAvailable = !gpus.empty();
+    metrics->gpuName = main ? main->name : std::string();
+    metrics->gpuHasBusy = main && main->hasBusy;
+    metrics->gpuHasTemperature = main && main->hasTemperature;
+    metrics->gpuPercent = main ? main->busy : 0;
+    metrics->gpuTemperature = main ? std::max(0.0, main->temperature) : 0;
+    metrics->gpus = std::move(gpus);
 }

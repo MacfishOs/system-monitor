@@ -5,48 +5,63 @@ cmake_minimum_required(VERSION 3.16)
 
 project(cutefish-system-monitor VERSION 1.0.0 LANGUAGES CXX)
 
-set(CMAKE_AUTOMOC ON)
-set(CMAKE_AUTORCC ON)
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include(GNUInstallDirs)
 include(CTest)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Quick QuickControls2 DBus Concurrent)
-find_package(CutefishFramework REQUIRED COMPONENTS Application)
+find_package(CutefishToolkit REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(ICU REQUIRED IMPORTED_TARGET icu-uc icu-i18n)
 
 add_library(monitor-backend STATIC
     src/diskreader.cpp
-    src/gpureader.cpp
     src/fileutil.cpp
-    src/networkreader.cpp
-    src/procreader.cpp
-    src/processmodel.cpp
+    src/gpureader.cpp
     src/monitor.cpp
+    src/networkreader.cpp
+    src/preferences.cpp
+    src/processlist.cpp
+    src/procreader.cpp
+    src/textutil.cpp
 )
 target_include_directories(monitor-backend PUBLIC src)
-# Linked into the application module.
-set_target_properties(monitor-backend PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_link_libraries(monitor-backend PUBLIC Qt6::Core Qt6::Concurrent Cutefish::Application)
+target_link_libraries(monitor-backend PUBLIC Cutefish::ToolkitBase PRIVATE PkgConfig::ICU)
 
-cutefish_add_application(${PROJECT_NAME} SOURCES
-    src/main.cpp
-    src/historygraph.cpp
-    resources.qrc
-)
-target_compile_definitions(${PROJECT_NAME}-module PRIVATE SYSTEM_MONITOR_VERSION="${PROJECT_VERSION}")
-target_link_libraries(${PROJECT_NAME}-module PRIVATE
-    monitor-backend
-    Qt6::Gui
-    Qt6::Quick
-    Qt6::QuickControls2
-    Qt6::DBus
-)
+# The glyphs, built in.
+file(GLOB SYSTEM_MONITOR_ICONS CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/icons/*.svg)
+set(SYSTEM_MONITOR_EMBEDDED ${CMAKE_CURRENT_BINARY_DIR}/icons.cpp)
+# A list would be split into separate arguments on the way to the script.
+string(REPLACE ";" "|" SYSTEM_MONITOR_ICON_LIST "${SYSTEM_MONITOR_ICONS}")
+add_custom_command(OUTPUT ${SYSTEM_MONITOR_EMBEDDED}
+    COMMAND ${CMAKE_COMMAND} -DOUTPUT=${SYSTEM_MONITOR_EMBEDDED}
+            -DFILES=${SYSTEM_MONITOR_ICON_LIST} -P ${PROJECT_SOURCE_DIR}/cmake/EmbedIcons.cmake
+    DEPENDS ${SYSTEM_MONITOR_ICONS} ${PROJECT_SOURCE_DIR}/cmake/EmbedIcons.cmake
+    VERBATIM)
 
+add_library(monitor-ui STATIC
+    src/views/chartcard.cpp
+    src/views/components.cpp
+    src/views/historygraph.cpp
+    src/views/mainwindow.cpp
+    src/views/processdetails.cpp
+    src/views/processespage.cpp
+    src/views/resourcepage.cpp
+    src/views/summarycard.cpp
+    src/views/textmetrics.cpp
+    ${SYSTEM_MONITOR_EMBEDDED}
+)
+target_include_directories(monitor-ui PUBLIC src src/views)
+target_link_libraries(monitor-ui PUBLIC monitor-backend Cutefish::Toolkit)
+
+add_executable(${PROJECT_NAME} src/main.cpp)
+target_compile_definitions(${PROJECT_NAME} PRIVATE SYSTEM_MONITOR_VERSION="${PROJECT_VERSION}")
+target_link_libraries(${PROJECT_NAME} PRIVATE monitor-ui)
+
+install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(FILES cutefish-system-monitor.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
 
 if(BUILD_TESTING)
-    find_package(Qt6 REQUIRED COMPONENTS Test)
     add_subdirectory(tests)
 endif()

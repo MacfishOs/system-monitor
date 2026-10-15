@@ -4,59 +4,60 @@
 #include "networkreader.h"
 #include "fileutil.h"
 
-#include <QFileInfo>
-
-NetworkReader::NetworkReader(const QString &procRoot, const QString &sysRoot)
-    : m_procRoot(procRoot)
-    , m_sysRoot(sysRoot)
+NetworkReader::NetworkReader(std::string procRoot, std::string sysRoot)
+    : m_procRoot(std::move(procRoot))
+    , m_sysRoot(std::move(sysRoot))
 {
 }
 
-void NetworkReader::sample(QVariantMap *metrics, double elapsed)
+void NetworkReader::sample(Metrics* metrics, double elapsed)
 {
-    QHash<QString, QPair<quint64, quint64>> networks;
-    QVariantList interfaces;
+    std::unordered_map<std::string, std::pair<uint64_t, uint64_t>> networks;
+    std::vector<NetworkInterface> interfaces;
     double download = 0;
     double upload = 0;
-    quint64 received = 0;
-    quint64 sent = 0;
-    for (const QByteArray &line : readFile(m_procRoot + QStringLiteral("/net/dev")).split('\n')) {
-        const int separator = line.indexOf(':');
-        if (separator < 0)
+    uint64_t received = 0;
+    uint64_t sent = 0;
+    const std::string devices = readFile(m_procRoot + "/net/dev");
+    for (const std::string_view line : split(devices, '\n')) {
+        const size_t separator = line.find(':');
+        if (separator == std::string_view::npos)
             continue;
-        const QString name = QString::fromLatin1(line.left(separator).trimmed());
-        const auto values = splitFields(line.mid(separator + 1));
-        if (name == QLatin1String("lo") || values.size() < 16)
+        const std::string name = validUtf8(trimmed(line.substr(0, separator)));
+        const auto values = splitFields(line.substr(separator + 1));
+        if (name == "lo" || values.size() < 16)
             continue;
-        const quint64 rx = values[0].toULongLong();
-        const quint64 tx = values[8].toULongLong();
-        networks.insert(name, { rx, tx });
-        const auto previous = m_previous.value(name);
-        const double rxRate = m_previous.contains(name) ? byteRate(rx, previous.first, elapsed) : 0;
-        const double txRate = m_previous.contains(name) ? byteRate(tx, previous.second, elapsed) : 0;
-        const bool physical = QFileInfo::exists(m_sysRoot + QStringLiteral("/class/net/") + name + QStringLiteral("/device"));
+        const uint64_t rx = toUnsigned(values[0]);
+        const uint64_t tx = toUnsigned(values[8]);
+        networks[name] = {rx, tx};
+        const auto previous = m_previous.find(name);
+        const bool known = previous != m_previous.end();
+        const double rxRate = known ? byteRate(rx, previous->second.first, elapsed) : 0;
+        const double txRate = known ? byteRate(tx, previous->second.second, elapsed) : 0;
+        const std::string directory = m_sysRoot + "/class/net/" + name;
+        const bool physical = fileExists(directory + "/device");
         if (physical) {
             download += rxRate;
             upload += txRate;
             received += rx;
             sent += tx;
         }
-        interfaces.append(QVariantMap {
-            { QStringLiteral("name"), name },
-            { QStringLiteral("state"), QString::fromLatin1(readFile(m_sysRoot + QStringLiteral("/class/net/") + name + QStringLiteral("/operstate")).trimmed()) },
-            { QStringLiteral("address"), QString::fromLatin1(readFile(m_sysRoot + QStringLiteral("/class/net/") + name + QStringLiteral("/address")).trimmed()) },
-            { QStringLiteral("download"), rxRate },
-            { QStringLiteral("upload"), txRate },
-            { QStringLiteral("received"), rx },
-            { QStringLiteral("sent"), tx },
-            { QStringLiteral("physical"), physical }
-        });
+        NetworkInterface interface;
+        interface.name = name;
+        interface.state = validUtf8(trimmed(readFile(directory + "/operstate")));
+        interface.address = validUtf8(trimmed(readFile(directory + "/address")));
+        interface.download = rxRate;
+        interface.upload = txRate;
+        interface.received = rx;
+        interface.sent = tx;
+        interface.physical = physical;
+        interfaces.push_back(std::move(interface));
     }
-    metrics->insert(QStringLiteral("download"), download);
-    metrics->insert(QStringLiteral("upload"), upload);
-    metrics->insert(QStringLiteral("received"), received);
-    metrics->insert(QStringLiteral("sent"), sent);
-    metrics->insert(QStringLiteral("interfaces"), interfaces);
+    metrics->download = download;
+    metrics->upload = upload;
+    metrics->received = received;
+    metrics->sent = sent;
+    metrics->interfaces = std::move(interfaces);
 
-    m_previous = networks;
+    m_previous = std::move(networks);
 }

@@ -1,15 +1,19 @@
 # SPDX-FileCopyrightText: 2026 Reion Wong <reionwong@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-add_executable(tst_monitor tst_monitor.cpp)
-target_link_libraries(tst_monitor PRIVATE monitor-backend Qt6::Test)
-add_test(NAME system_monitor_backend COMMAND tst_monitor)
+find_package(GTest REQUIRED)
+include(GoogleTest)
 
-add_executable(tst_ui
-    tst_ui.cpp
-    ${PROJECT_SOURCE_DIR}/src/historygraph.cpp
-    ${PROJECT_SOURCE_DIR}/resources.qrc
+add_executable(system-monitor-tests
+    main.cpp
+    monitor_test.cpp
 )
-target_link_libraries(tst_ui PRIVATE monitor-backend Cutefish::Application
-    Qt6::Quick Qt6::QuickControls2 Qt6::Test)
-add_test(NAME system_monitor_ui COMMAND tst_ui -platform offscreen)
+target_link_libraries(system-monitor-tests PRIVATE monitor-backend GTest::gtest)
+gtest_discover_tests(system-monitor-tests)
+
+add_executable(system-monitor-capture capture.cpp)
+target_link_libraries(system-monitor-capture PRIVATE monitor-ui)
+
+add_executable(system-monitor-ui-tests ui_test.cpp)
+target_link_libraries(system-monitor-ui-tests PRIVATE monitor-ui GTest::gtest)
+gtest_discover_tests(system-monitor-ui-tests)
