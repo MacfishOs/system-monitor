@@ -7,7 +7,7 @@
 #include "ui/label.h"
 #include "ui/layout.h"
 #include "ui/painter.h"
-#include "ui/quick_layout.h"
+#include "ui/cell_layout.h"
 #include "ui/view.h"
 
 #include <optional>

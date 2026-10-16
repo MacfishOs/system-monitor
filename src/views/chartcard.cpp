@@ -6,7 +6,7 @@
 #include "historygraph.h"
 #include "monitor.h"
 
-#include "ui/quick_layout.h"
+#include "ui/cell_layout.h"
 #include "ui/theme.h"
 
 #include <algorithm>

@@ -160,7 +160,7 @@ protected:
             page->setGeometry(pages->localRect());
         const SizeF errorSize = error->sizeHint();
         error->setColor(accent::red);
-        error->setGeometry({qml::anchorsCenter(width, errorSize.width), height - 12 - errorSize.height, errorSize.width,
+        error->setGeometry({rounding::centeredStart(width, errorSize.width), height - 12 - errorSize.height, errorSize.width,
                             errorSize.height});
     }
 

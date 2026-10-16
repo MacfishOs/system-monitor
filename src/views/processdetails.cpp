@@ -11,7 +11,7 @@
 #include "ui/keys.h"
 #include "ui/label.h"
 #include "ui/layout.h"
-#include "ui/quick_layout.h"
+#include "ui/cell_layout.h"
 #include "ui/list_view.h"
 #include "ui/text_area.h"
 #include "ui/theme.h"

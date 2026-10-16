@@ -92,7 +92,7 @@ public:
 protected:
     void layout() override
     {
-        m_icon->setGeometry({qml::anchorsCenter(geometry().width, 16), qml::anchorsCenter(geometry().height, 16), 16, 16});
+        m_icon->setGeometry({rounding::centeredStart(geometry().width, 16), rounding::centeredStart(geometry().height, 16), 16, 16});
         m_icon->setColor(Theme::current().text);
         m_icon->setOpacity(isEnabled() ? 1.0 : 0.35);
     }
@@ -197,10 +197,10 @@ protected:
         const SizeF size = m_label->sizeHint();
         const double x = m_numeric ? geometry().width - size.width - 12 : 12;
         m_label->setColor(color);
-        m_label->setGeometry({x, qml::anchorsCenter(geometry().height, size.height), size.width, size.height});
+        m_label->setGeometry({x, rounding::centeredStart(geometry().height, size.height), size.width, size.height});
         // Numeric titles stay flush with their values; the indicator sits in the cell's 12 px margin.
         m_indicator->setColor(color);
-        m_indicator->setGeometry({x + size.width + 3, qml::anchorsCenter(geometry().height, 10), 10, 10});
+        m_indicator->setGeometry({x + size.width + 3, rounding::centeredStart(geometry().height, 10), 10, 10});
     }
 
     void pointerPress(const PointerEvent& event) override { m_pressed = event.button == MouseButton::Left; }
@@ -263,7 +263,7 @@ protected:
         const double height = geometry().height;
         const double nameWidth = m_page->nameWidth();
         m_width = m_page->m_table->geometry().width;
-        m_icon->setGeometry({12, qml::anchorsCenter(height, 22), 22, 22});
+        m_icon->setGeometry({12, rounding::centeredStart(height, 22), 22, 22});
         m_name->setColor(m_highlighted ? theme.highlightedText : theme.text);
         m_name->setGeometry({44, 0, std::max(0.0, nameWidth - 44 - 12), height});
         double x = nameWidth;
@@ -543,6 +543,6 @@ void ProcessesPage::layout()
     m_emptyText->setColor(Theme::current().disabledText);
     const double emptyWidth = std::max(0.0, tableWidth - 64);
     const double emptyHeight = m_empty->heightForWidth(emptyWidth);
-    m_empty->setGeometry({qml::anchorsCenter(tableWidth, emptyWidth), qml::anchorsCenter(m_table->geometry().height, emptyHeight),
+    m_empty->setGeometry({rounding::centeredStart(tableWidth, emptyWidth), rounding::centeredStart(m_table->geometry().height, emptyHeight),
                           emptyWidth, emptyHeight});
 }
