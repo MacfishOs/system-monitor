@@ -9,11 +9,13 @@ add_executable(system-monitor-tests
     monitor_test.cpp
 )
 target_link_libraries(system-monitor-tests PRIVATE monitor-backend GTest::gtest)
-gtest_discover_tests(system-monitor-tests)
+# The application tests group every running copy of this binary.
+gtest_discover_tests(system-monitor-tests PROPERTIES RESOURCE_LOCK system-monitor-tests)
 
 add_executable(system-monitor-capture capture.cpp)
 target_link_libraries(system-monitor-capture PRIVATE monitor-ui)
 
 add_executable(system-monitor-ui-tests ui_test.cpp)
 target_link_libraries(system-monitor-ui-tests PRIVATE monitor-ui GTest::gtest)
-gtest_discover_tests(system-monitor-ui-tests)
+# The application tests group every running copy of this binary.
+gtest_discover_tests(system-monitor-ui-tests PROPERTIES RESOURCE_LOCK system-monitor-ui-tests)
