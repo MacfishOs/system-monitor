@@ -94,7 +94,8 @@ std::vector<Volume> DiskReader::volumes(const std::string& mountInfo)
     // The file systems a user would look for: none under /dev, /proc, /sys,
     // /var/run or /var/lock, no initrd rootfs, nothing hidden under a later mount.
     std::vector<Mount> mounts;
-    for (const std::string_view line : split(readFile(mountInfo), '\n')) {
+    const std::string contents = readFile(mountInfo);
+    for (const std::string_view line : split(contents, '\n')) {
         const auto fields = split(line, ' ');
         size_t separator = 6;
         while (separator < fields.size() && fields[separator] != "-")

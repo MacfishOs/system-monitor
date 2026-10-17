@@ -58,7 +58,8 @@ ProcReader::ProcReader(std::string procRoot, std::string sysRoot)
     if (pageSize > 0)
         m_pageSize = pageSize;
 
-    for (const std::string_view line : split(readFile(m_procRoot + "/cpuinfo"), '\n')) {
+    const std::string cpuInfo = readFile(m_procRoot + "/cpuinfo");
+    for (const std::string_view line : split(cpuInfo, '\n')) {
         if (line.starts_with("model name") || line.starts_with("Hardware")) {
             const size_t colon = line.find(':');
             m_cpuName = validUtf8(trimmed(colon == std::string_view::npos ? line : line.substr(colon + 1)));
