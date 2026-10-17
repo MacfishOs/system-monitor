@@ -19,6 +19,10 @@
 
 using namespace std::chrono_literals;
 
+// Programs and application ids no process has named for this many samples are
+// looked up again if they return; titles some programs set make the set unbounded.
+static constexpr uint64_t kRetainedSamples = 60;
+
 Monitor::Monitor(ApplicationLookup lookup, std::string preferences)
     : m_lookup(std::move(lookup))
     , m_preferences(std::move(preferences))
@@ -83,9 +87,13 @@ void Monitor::acceptSample(Snapshot snapshot)
         m_ready = true;
         m_metrics = std::move(snapshot.metrics);
         m_metrics.volumes = m_volumes;
+        ++m_samples;
         for (ProcessRecord& process : snapshot.processes)
             identify(&process);
         m_applications.apply(groupApplications(snapshot.processes));
+        const auto stale = [this](const auto& entry) { return m_samples - entry.second.seen > kRetainedSamples; };
+        std::erase_if(m_programs, stale);
+        std::erase_if(m_applicationIds, stale);
         m_processes.apply(std::move(snapshot.processes));
         const int64_t timestamp
             = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - m_historyClock)
@@ -141,6 +149,7 @@ void Monitor::identify(ProcessRecord* process)
         const auto entry = m_lookup.resolve ? m_lookup.resolve(name, process->program) : std::nullopt;
         application = m_programs.emplace(process->program, describeEntry(entry)).first;
     }
+    application->second.seen = m_samples;
     process->appId = application->second.id;
     if (!application->second.name.empty())
         process->displayName = application->second.name;
@@ -186,6 +195,7 @@ std::vector<ProcessRecord> Monitor::groupApplications(const std::vector<ProcessR
                 const auto entry = m_lookup.byId ? m_lookup.byId(process.scopeId) : std::nullopt;
                 scope = m_applicationIds.emplace(process.scopeId, describeEntry(entry)).first;
             }
+            scope->second.seen = m_samples;
             id = scope->second.id;
         }
         if (id.empty())
@@ -231,6 +241,7 @@ std::vector<ProcessRecord> Monitor::groupApplications(const std::vector<ProcessR
                                                  : Application{id, main->displayName, main->iconName})
                               .first;
         }
+        application->second.seen = m_samples;
 
         ProcessRecord group = *main;
         group.appId = id;

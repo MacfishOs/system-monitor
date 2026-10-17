@@ -104,6 +104,8 @@ private:
         std::string id;
         std::string name;
         std::string icon;
+        // The sample that last named it.
+        uint64_t seen = 0;
     };
 
     void savePreferences() const;
@@ -120,6 +122,7 @@ private:
     int m_scope = 1;
     std::unordered_map<std::string, Application> m_applicationIds;
     std::unordered_map<std::string, Application> m_programs;
+    uint64_t m_samples = 0;
     std::shared_ptr<ProcReader> m_reader;
     cutefish::base::Job m_sampleJob;
     cutefish::base::Job m_volumeJob;
