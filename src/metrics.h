@@ -66,12 +66,19 @@ struct Gpu
     uint64_t vramTotal = 0;
 };
 
+struct Processor
+{
+    // The kernel's number, which skips offline processors.
+    int number = 0;
+    double usage = 0;
+};
+
 struct Metrics
 {
     MemoryMetrics memory;
 
     double cpuPercent = 0;
-    std::vector<double> cores;
+    std::vector<Processor> cores;
     std::string cpuName;
     int processCount = 0;
 

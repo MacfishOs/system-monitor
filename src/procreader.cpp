@@ -396,7 +396,7 @@ Snapshot ProcReader::sample()
         if (name == "cpu")
             metrics.cpuPercent = usage;
         else
-            metrics.cores.push_back(usage);
+            metrics.cores.push_back({toInt(std::string_view(name).substr(3)), usage});
     }
     metrics.cpuName = m_cpuName;
 

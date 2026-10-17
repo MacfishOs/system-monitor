@@ -267,8 +267,8 @@ void ResourcePage::update()
     switch (m_page) {
     case 1:
         for (size_t i = 0; i < m_tiles.size(); ++i) {
-            const double usage = metrics.cores[i];
-            m_tiles[i]->name->setText("CPU " + std::to_string(i + 1));
+            const double usage = metrics.cores[i].usage;
+            m_tiles[i]->name->setText("CPU " + std::to_string(metrics.cores[i].number + 1));
             m_tiles[i]->value->setText(Monitor::formatPercent(usage));
             m_tiles[i]->bar->setValue(std::clamp(usage / 100, 0.0, 1.0));
             m_tiles[i]->requestLayout();

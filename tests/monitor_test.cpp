@@ -364,6 +364,25 @@ TEST(ProcReaderTest, SamplingAndPidReuse)
     EXPECT_EQ(reused.processes[0].name, "replacement");
 }
 
+TEST(ProcReaderTest, OfflineProcessors)
+{
+    TemporaryDirectory directory;
+    const std::string proc = directory.path() + "/proc";
+    ASSERT_TRUE(writeFile(proc + "/meminfo", "MemTotal: 1000 kB\n"));
+    ASSERT_TRUE(writeFile(proc + "/stat", "cpu 0 0 0 200 0 0 0 0\ncpu0 0 0 0 100 0 0 0 0\n"
+                                          "cpu2 0 0 0 100 0 0 0 0\n"));
+    ProcReader reader(proc, directory.path() + "/sys");
+    reader.sample();
+    ASSERT_TRUE(writeFile(proc + "/stat", "cpu 100 0 0 300 0 0 0 0\ncpu0 0 0 0 200 0 0 0 0\n"
+                                          "cpu2 100 0 0 100 0 0 0 0\n"));
+    const auto sample = reader.sample();
+    ASSERT_EQ(sample.metrics.cores.size(), 2u);
+    EXPECT_EQ(sample.metrics.cores[0].number, 0);
+    EXPECT_EQ(sample.metrics.cores[0].usage, 0.0);
+    EXPECT_EQ(sample.metrics.cores[1].number, 2);
+    EXPECT_EQ(sample.metrics.cores[1].usage, 100.0);
+}
+
 TEST(ProcReaderTest, DeviceAccounting)
 {
     TemporaryDirectory directory;
