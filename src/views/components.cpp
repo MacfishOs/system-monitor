@@ -3,6 +3,7 @@
 
 #include "components.h"
 
+#include "ui/color_provider.h"
 #include "ui/theme.h"
 
 #include <algorithm>
@@ -66,11 +67,9 @@ void Plate::paint(Painter& painter)
 
 void paintSeparator(Painter& painter, double x, double bottom, double width)
 {
-    const Theme& theme = Theme::current();
     // FishUI's Separator: a RoundedRectangle 1 / Dpi.ratio high on the bottom edge, snapped as PixelGrid does.
     const double height = 1 / painter.scale();
-    painter.drawRoundedRect({x, bottom - height, width, height}, {0, 0, themeCorners()},
-                            theme.disabledText.withAlpha(theme.darkMode ? 0.3 : 0.1));
+    painter.drawRoundedRect({x, bottom - height, width, height}, {0, 0, themeCorners()}, color(ColorId::Separator));
 }
 
 InfoRow::InfoRow(std::string text, std::string value)

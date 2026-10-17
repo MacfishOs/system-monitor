@@ -42,6 +42,7 @@ add_custom_command(OUTPUT ${SYSTEM_MONITOR_EMBEDDED}
 
 add_library(monitor-ui STATIC
     src/views/chartcard.cpp
+    src/views/colors.cpp
     src/views/components.cpp
     src/views/historygraph.cpp
     src/views/mainwindow.cpp

@@ -3,6 +3,7 @@
 
 #include "processespage.h"
 
+#include "colors.h"
 #include "components.h"
 #include "monitor.h"
 #include "processlist.h"
@@ -100,14 +101,14 @@ protected:
     void paint(Painter& painter) override
     {
         const Theme& theme = Theme::current();
-        Color color = theme.secondBackground;
+        Color fill = theme.secondBackground;
         if (!isEnabled())
-            color = theme.darkMode ? Color::rgb(0xFFFFFF).withAlpha(0.05) : Color::rgb(0x000000).withAlpha(0.03);
+            fill = color(MonitorColor::MutedPlate);
         else if (m_pressed)
-            color = tint(theme.secondBackground, theme.text.withAlpha(0.06));
+            fill = tint(theme.secondBackground, theme.text.withAlpha(0.06));
         else if (m_hovered)
-            color = tint(theme.secondBackground, theme.text.withAlpha(0.025));
-        painter.fillRoundedRect(localRect(), geometry().height / 2, color);
+            fill = tint(theme.secondBackground, theme.text.withAlpha(0.025));
+        painter.fillRoundedRect(localRect(), geometry().height / 2, fill);
     }
 
     void pointerEnter() override
@@ -515,8 +516,7 @@ void ProcessesPage::layout()
     const double width = geometry().width;
     const double height = geometry().height;
     const double right = width - kMargin;
-    const Theme& theme = Theme::current();
-    m_scope->setTrackColor(theme.darkMode ? Color::rgb(0xFFFFFF).withAlpha(0.05) : Color::rgb(0x000000).withAlpha(0.03));
+    m_scope->setTrackColor(color(MonitorColor::MutedPlate));
     m_scope->setGeometry({kMargin, kTop, kScopeWidth, 36});
     const double fieldTop = kTop + (36 - kFieldHeight) / 2;
     m_quit->setGeometry({right - kFieldHeight, fieldTop, kFieldHeight, kFieldHeight});
