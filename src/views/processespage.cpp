@@ -490,11 +490,9 @@ void ProcessesPage::reload()
     const size_t count = list().count();
     m_list->setRowCount(count);
     m_list->reload();
-    m_empty->setVisible(count == 0);
-    m_emptyTitle->setText(!m_monitor.ready() ? "Collecting system information…"
-                          : applicationsMode() ? "No applications found"
-                                               : "No processes found");
-    m_emptyText->setText(m_monitor.ready() ? "Try a different name, user, or process ID." : "");
+    m_empty->setVisible(count == 0 && m_monitor.ready());
+    m_emptyTitle->setText(applicationsMode() ? "No applications found" : "No processes found");
+    m_emptyText->setText("Try a different name, user, or process ID.");
     selectionChanged();
     requestLayout();
 }
