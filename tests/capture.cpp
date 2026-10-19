@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 Reion Wong <reionwong@gmail.com>
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: BSD-3-Clause
 
 // Renders the window headless, every page, with its layout:
 //   system-monitor-capture DIR [WIDTH HEIGHT SCALE [dark]]

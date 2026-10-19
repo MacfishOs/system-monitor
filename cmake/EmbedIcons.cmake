@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: 2026 Reion Wong <reionwong@gmail.com>
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: BSD-3-Clause
 
 # Writes a C++ source listing each SVG by its name without the suffix:
 #   cmake -DOUTPUT=icons.cpp -DFILES="a.svg|b.svg" -P EmbedIcons.cmake
