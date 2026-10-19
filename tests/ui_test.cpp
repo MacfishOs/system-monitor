@@ -271,6 +271,26 @@ TEST(UiTest, ApplicationView)
     EXPECT_EQ(window.selectedProcess()->members.size(), 1u);
 }
 
+TEST(UiTest, LanguageChangeKeepsWhereTheUserWas)
+{
+    Fixture fixture;
+    MainWindow& window = fixture.window;
+    auto* search = static_cast<TextField*>(fixture.view("processSearch"));
+    search->setText("cutefish");
+    search->onTextChanged();
+    window.setCurrentPage(3);
+    fixture.layout();
+    const View* before = fixture.view("processSearch");
+
+    Application::instance()->languageChanged.emit();
+    fixture.layout();
+    EXPECT_NE(fixture.view("processSearch"), before);
+    EXPECT_EQ(window.currentPage(), 3);
+    ASSERT_NE(fixture.view("resourceChart"), nullptr);
+    EXPECT_EQ(static_cast<TextField*>(fixture.view("processSearch"))->text(), "cutefish");
+    EXPECT_EQ(fixture.monitor.processes().search(), "cutefish");
+}
+
 TEST(UiTest, TimestampedGraph)
 {
     Window window;

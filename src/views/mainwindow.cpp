@@ -24,6 +24,7 @@
 #include "ui/window_header.h"
 
 #include <algorithm>
+#include <optional>
 
 using namespace cutefish::ui;
 using cutefish::i18n::format;
@@ -178,11 +179,32 @@ MainWindow::MainWindow(Monitor& monitor)
     : m_monitor(monitor)
     , m_toast(&m_window)
 {
-    m_window.setTitle(tr("System Monitor"));
     m_window.resize({1040, 700});
     m_window.setMinimumSize({840, 600});
     m_window.setRestoresSize("Main");
+    buildContent();
 
+    m_window.addShortcut(ControlModifier, 'f', [this] {
+        setCurrentPage(0);
+        m_processes->focusSearch();
+    });
+    m_window.addShortcut(NoModifier, key::Escape, [this] {
+        if (m_page == 0 && !m_processes->isEditingSearch())
+            return;
+        setCurrentPage(0);
+        m_processes->clearSearch();
+    });
+    m_window.onActiveChanged = [this] { m_root->content->requestLayout(); };
+
+    m_updated = m_monitor.updated.connect([this] { update(); });
+    m_languageChanged = Application::instance()->languageChanged.connect([this] { retranslate(); });
+    update();
+    setCurrentPage(0);
+}
+
+void MainWindow::buildContent()
+{
+    m_window.setTitle(tr("System Monitor"));
     auto root = std::make_unique<Root>(this);
     m_root = root.get();
     m_processes = m_root->addChild<ProcessesPage>(m_monitor, m_selection);
@@ -198,6 +220,7 @@ MainWindow::MainWindow(Monitor& monitor)
         ++page;
     }
 
+    m_intervalMenu.clear();
     for (const auto& [text, interval] : std::vector<std::pair<const char*, int>>{
              {tr("Update Every Second"), 1000}, {tr("Update Every 2 Seconds"), 2000}, {tr("Update Every 5 Seconds"), 5000}}) {
         m_intervalMenu.addItem(text, [this, interval] { m_monitor.setInterval(interval); });
@@ -214,6 +237,7 @@ MainWindow::MainWindow(Monitor& monitor)
     };
     m_intervalMenu.onClosed = [intervalButton] { intervalButton->setChecked(false); };
 
+    m_contextMenu.clear();
     m_contextMenu.addItem(tr("Details"), [this] { openDetails(); });
     m_contextMenu.addItem(tr("Copy Process ID"), [this] { Clipboard::setText(std::to_string(m_selection.pid)); });
     m_contextMenu.addSeparator();
@@ -226,22 +250,28 @@ MainWindow::MainWindow(Monitor& monitor)
         updateContextMenu();
         m_contextMenu.popup(&m_window, position);
     };
+}
 
-    m_window.addShortcut(ControlModifier, 'f', [this] {
-        setCurrentPage(0);
-        m_processes->focusSearch();
-    });
-    m_window.addShortcut(NoModifier, key::Escape, [this] {
-        if (m_page == 0 && !m_processes->isEditingSearch())
-            return;
-        setCurrentPage(0);
-        m_processes->clearSearch();
-    });
-    m_window.onActiveChanged = [this] { m_root->content->requestLayout(); };
-
-    m_updated = m_monitor.updated.connect([this] { update(); });
+// The views are made again; the page, the scope, the search, the selection
+// and an open details window stay.
+void MainWindow::retranslate()
+{
+    const int page = m_page;
+    std::optional<Selection> details;
+    if (m_details)
+        details = m_details->target();
+    m_details.reset();
+    m_confirm.reset();
+    m_resource = nullptr;
+    buildContent();
     update();
-    setCurrentPage(0);
+    setCurrentPage(page);
+    m_processes->selectionChanged();
+    if (details) {
+        m_details = std::make_unique<ProcessDetails>(&m_window, m_monitor, *details);
+        m_details->onClosed = [this] { m_details.reset(); };
+        m_details->show();
+    }
 }
 
 MainWindow::~MainWindow() = default;

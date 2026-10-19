@@ -47,6 +47,9 @@ public:
 private:
     class Root;
 
+    // The views and menus, all of which show text.
+    void buildContent();
+    void retranslate();
     void update();
     void updateContextMenu();
 
@@ -65,4 +68,5 @@ private:
     std::unique_ptr<ProcessDetails> m_details;
     cutefish::base::Subscription m_updated;
     cutefish::base::Subscription m_intervalChanged;
+    cutefish::base::Subscription m_languageChanged;
 };

@@ -20,6 +20,7 @@ public:
 
     void show();
     cutefish::ui::Window* window() const { return m_dialog.window(); }
+    const Selection& target() const { return m_target; }
 
     std::function<void()> onClosed;
 

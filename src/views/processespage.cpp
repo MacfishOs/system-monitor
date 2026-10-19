@@ -362,6 +362,7 @@ ProcessesPage::ProcessesPage(Monitor& monitor, Selection& selection)
     };
 
     m_search->setFontSize(points(9));
+    m_search->setText(m_monitor.processes().search());
     m_search->onTextChanged = [this] {
         m_monitor.processes().setSearch(m_search->text());
         m_monitor.applications().setSearch(m_search->text());
