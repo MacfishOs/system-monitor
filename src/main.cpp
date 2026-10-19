@@ -18,7 +18,7 @@
 
 using namespace cutefish;
 
-static const char* const kService = "com.cutefish.SystemMonitor";
+static const char* const kService = "org.cutefish.SystemMonitor";
 static const char* const kPath = "/SystemMonitor";
 
 // As the Qt version's command line: --help and --version, nothing else.
