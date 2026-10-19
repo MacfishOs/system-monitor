@@ -7,6 +7,7 @@
 #include "procreader.h"
 #include "textutil.h"
 
+#include "base/i18n.h"
 #include "base/locale.h"
 
 #include <algorithm>
@@ -94,7 +95,8 @@ std::string ProcessList::programName(const ProcessRecord& process)
 
     if (process.helperType.empty())
         return name;
-    return name + " (" + ProcReader::helperName(process.helperType) + ")";
+    return cutefish::i18n::format(cutefish::i18n::tr("{name} ({helper})"),
+                                  {{"name", name}, {"helper", ProcReader::helperName(process.helperType)}});
 }
 
 static bool matches(const ProcessRecord& process, const std::string& query)

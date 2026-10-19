@@ -4,12 +4,16 @@
 #include "procreader.h"
 #include "fileutil.h"
 
+#include "base/i18n.h"
+
 #include <algorithm>
 #include <climits>
 #include <pwd.h>
 #include <sys/stat.h>
 #include <sys/utsname.h>
 #include <unistd.h>
+
+using cutefish::i18n::tr;
 
 // python, perl, ruby and lua with any version suffix, and a few more.
 static bool isScriptInterpreter(std::string_view name)
@@ -158,15 +162,15 @@ bool ProcReader::parseProcess(std::string_view contents, ProcessRecord* process,
 std::string ProcReader::stateName(const std::string& state)
 {
     if (state == "R")
-        return "Running";
+        return tr("Running");
     if (state == "S" || state == "I")
-        return "Sleeping";
+        return tr("Sleeping");
     if (state == "D")
-        return "Waiting for I/O";
+        return tr("Waiting for I/O");
     if (state == "T" || state == "t")
-        return "Stopped";
+        return tr("Stopped");
     if (state == "Z")
-        return "Zombie";
+        return tr("Zombie");
     return state;
 }
 
@@ -246,23 +250,23 @@ std::string ProcReader::helperType(std::string_view commandLine)
 std::string ProcReader::helperName(const std::string& type)
 {
     if (type == "renderer")
-        return "Renderer";
+        return tr("Renderer");
     if (type == "extension")
-        return "Extension";
+        return tr("Extension");
     if (type == "gpu-process")
-        return "GPU";
+        return tr("GPU");
     if (type == "zygote")
-        return "Zygote";
+        return tr("Zygote");
     if (type == "network.mojom.NetworkService")
-        return "Network";
+        return tr("Network");
     if (type == "audio.mojom.AudioService")
-        return "Audio";
+        return tr("Audio");
     if (type == "storage.mojom.StorageService")
-        return "Storage";
+        return tr("Storage");
     if (type == "video_capture.mojom.VideoCaptureService")
-        return "Video Capture";
+        return tr("Video Capture");
     if (type == "utility" || type.find(".mojom.") != std::string::npos)
-        return "Utility";
+        return tr("Utility");
     return type;
 }
 
@@ -374,7 +378,7 @@ Snapshot ProcReader::sample()
     const std::string stat = readFile(m_procRoot + "/stat");
     const std::string memory = readFile(m_procRoot + "/meminfo");
     if (!stat.starts_with("cpu ") || memory.empty()) {
-        snapshot.error = "System information is unavailable.";
+        snapshot.error = tr("System information is unavailable.");
         return snapshot;
     }
 

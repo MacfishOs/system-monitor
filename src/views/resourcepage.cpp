@@ -8,6 +8,7 @@
 #include "historygraph.h"
 #include "monitor.h"
 
+#include "base/i18n.h"
 #include "ui/label.h"
 #include "ui/layout.h"
 #include "ui/progress_bar.h"
@@ -18,6 +19,10 @@
 #include <cmath>
 
 using namespace cutefish::ui;
+using cutefish::i18n::format;
+using cutefish::i18n::tr;
+using cutefish::i18n::trn;
+using cutefish::i18n::trNoop;
 
 static constexpr double kTileWidth = 150;
 static constexpr double kTileSpacing = 12;
@@ -114,7 +119,7 @@ void ResourcePage::rebuild()
     const Metrics& metrics = m_monitor.metrics();
     switch (m_page) {
     case 1:
-        addHeading("Logical processors");
+        addHeading(tr("Logical processors"));
         m_cores = m_layout->addChild<GridLayout>(2);
         m_cores->setColumnSpacing(kTileSpacing);
         m_cores->setRowSpacing(kTileSpacing);
@@ -126,21 +131,21 @@ void ResourcePage::rebuild()
     case 2:
         m_card = m_layout->addChild<ListCard>();
         m_card->setLayoutHints({.fillWidth = true});
-        for (const char* text : {"In use", "Available", "Cached", "Total memory", "Swap"})
-            m_card->addRow(text);
+        for (const char* text : {trNoop("In use"), trNoop("Available"), trNoop("Cached"), trNoop("Total memory"), trNoop("Swap")})
+            m_card->addRow(tr(text));
         break;
     case 3:
         m_card = m_layout->addChild<ListCard>();
         m_card->setLayoutHints({.fillWidth = true});
-        for (const char* text : {"Download", "Upload", "Total received", "Total sent"})
-            m_card->addRow(text);
-        addHeading("Network interfaces");
+        for (const char* text : {trNoop("Download"), trNoop("Upload"), trNoop("Total received"), trNoop("Total sent")})
+            m_card->addRow(tr(text));
+        addHeading(tr("Network interfaces"));
         for (size_t i = 0; i < metrics.interfaces.size(); ++i) {
             Section section = addSection(m_layout, 4);
-            section.rows[0]->setText("State");
-            section.rows[1]->setText("Download");
-            section.rows[2]->setText("Upload");
-            section.rows[3]->setText("Hardware address");
+            section.rows[0]->setText(tr("State"));
+            section.rows[1]->setText(tr("Download"));
+            section.rows[2]->setText(tr("Upload"));
+            section.rows[3]->setText(tr("Hardware address"));
             m_sections.push_back(section);
         }
         m_built[0] = metrics.interfaces.size();
@@ -148,13 +153,13 @@ void ResourcePage::rebuild()
     case 4:
         for (size_t i = 0; i < metrics.disks.size(); ++i) {
             Section section = addSection(m_layout, 4);
-            section.rows[0]->setText("Device");
-            section.rows[1]->setText("Capacity");
-            section.rows[2]->setText("Read");
-            section.rows[3]->setText("Write");
+            section.rows[0]->setText(tr("Device"));
+            section.rows[1]->setText(tr("Capacity"));
+            section.rows[2]->setText(tr("Read"));
+            section.rows[3]->setText(tr("Write"));
             m_sections.push_back(section);
         }
-        addHeading("Storage");
+        addHeading(tr("Storage"));
         for (size_t i = 0; i < metrics.volumes.size(); ++i) {
             Section section;
             section.column = m_layout->addChild<ColumnLayout>();
@@ -171,8 +176,8 @@ void ResourcePage::rebuild()
             bar->setLayoutHints({.preferredHeight = 22});
             section.usage = bar->addChild<ProgressBar>();
             section.usage->setLayoutHints({.fillWidth = true});
-            for (const char* text : {"Used", "Available", "File system"})
-                section.rows.push_back(section.card->addRow(text));
+            for (const char* text : {trNoop("Used"), trNoop("Available"), trNoop("File system")})
+                section.rows.push_back(section.card->addRow(tr(text)));
             m_volumes.push_back(section);
         }
         m_built[0] = metrics.disks.size();
@@ -181,9 +186,10 @@ void ResourcePage::rebuild()
     case 5:
         for (size_t i = 0; i < metrics.gpus.size(); ++i) {
             Section section = addSection(m_layout, 6);
-            const char* texts[] = {"Driver", "State", "Activity", "Temperature", "Clock speed", "Video memory"};
+            const char* texts[] = {trNoop("Driver"), trNoop("State"), trNoop("Activity"),
+                                   trNoop("Temperature"), trNoop("Clock speed"), trNoop("Video memory")};
             for (size_t row = 0; row < 6; ++row)
-                section.rows[row]->setText(texts[row]);
+                section.rows[row]->setText(tr(texts[row]));
             m_sections.push_back(section);
         }
         m_built[0] = metrics.gpus.size();
@@ -199,9 +205,9 @@ void ResourcePage::updateChart()
     const Metrics& metrics = m_monitor.metrics();
     const History& history = m_monitor.history();
     const bool temperature = m_page == 5 && !metrics.gpuHasBusy;
-    static const char* const titles[] = {"", "Processor activity", "Memory usage", "Network activity",
-                                          "Disk activity", "Graphics activity"};
-    m_chart->setTitle(temperature ? "Graphics temperature" : titles[m_page]);
+    static const char* const titles[] = {"", trNoop("Processor activity"), trNoop("Memory usage"), trNoop("Network activity"),
+                                          trNoop("Disk activity"), trNoop("Graphics activity")};
+    m_chart->setTitle(temperature ? tr("Graphics temperature") : tr(titles[m_page]));
     std::string value;
     std::string subtitle;
     std::vector<double> primary;
@@ -214,19 +220,19 @@ void ResourcePage::updateChart()
         break;
     case 2:
         value = Monitor::formatPercent(metrics.memory.percent);
-        subtitle = Monitor::formatBytes(double(metrics.memory.used)) + " of "
-                   + Monitor::formatBytes(double(metrics.memory.total)) + " in use";
+        subtitle = format(tr("{used} of {total} in use"), {{"used", Monitor::formatBytes(double(metrics.memory.used))},
+                                                          {"total", Monitor::formatBytes(double(metrics.memory.total))}});
         primary = history.memoryPercent;
         break;
     case 3:
         value = Monitor::formatRate(metrics.download);
-        subtitle = "Physical network interfaces";
+        subtitle = tr("Physical network interfaces");
         primary = history.download;
         secondary = history.upload;
         break;
     case 4:
         value = Monitor::formatRate(metrics.diskRead);
-        subtitle = "Physical disks";
+        subtitle = tr("Physical disks");
         primary = history.diskRead;
         secondary = history.diskWrite;
         break;
@@ -244,9 +250,9 @@ void ResourcePage::updateChart()
     m_chart->setSubtitle(subtitle);
     m_chart->setMaximum(m_page <= 2 || m_page == 5 ? 100 : 0);
     m_chart->setScaleLabel(temperature ? Monitor::formatTemperature(100) : std::string());
-    m_chart->setLegends(m_page == 3 ? "Download" : m_page == 4 ? "Read" : "",
-                        m_page == 3 ? "Upload" : m_page == 4 ? "Write" : "");
-    m_chart->setDurationText(std::to_string(m_monitor.historyDuration()) + " seconds");
+    m_chart->setLegends(m_page == 3 ? tr("Download") : m_page == 4 ? tr("Read") : "",
+                        m_page == 3 ? tr("Upload") : m_page == 4 ? tr("Write") : "");
+    m_chart->setDurationText(trn("{n} second", "{n} seconds", m_monitor.historyDuration()));
     m_chart->setSeries(std::move(primary), std::move(secondary), history.timestamps,
                        int64_t(m_monitor.historyDuration()) * 1000);
 }
@@ -268,7 +274,7 @@ void ResourcePage::update()
     case 1:
         for (size_t i = 0; i < m_tiles.size(); ++i) {
             const double usage = metrics.cores[i].usage;
-            m_tiles[i]->name->setText("CPU " + std::to_string(metrics.cores[i].number + 1));
+            m_tiles[i]->name->setText(format(tr("CPU {number}"), {{"number", std::to_string(metrics.cores[i].number + 1)}}));
             m_tiles[i]->value->setText(Monitor::formatPercent(usage));
             m_tiles[i]->bar->setValue(std::clamp(usage / 100, 0.0, 1.0));
             m_tiles[i]->requestLayout();
@@ -283,7 +289,7 @@ void ResourcePage::update()
         static_cast<InfoRow*>(rows[4].get())->setValue(
             metrics.memory.swapTotal > 0 ? Monitor::formatBytes(double(metrics.memory.swapUsed)) + " / "
                                                + Monitor::formatBytes(double(metrics.memory.swapTotal))
-                                         : "Not configured");
+                                         : tr("Not configured"));
         break;
     }
     case 3: {
@@ -295,9 +301,9 @@ void ResourcePage::update()
         for (size_t i = 0; i < m_sections.size(); ++i) {
             const NetworkInterface& adapter = metrics.interfaces[i];
             m_sections[i].title->setText(adapter.name);
-            m_sections[i].rows[0]->setValue(adapter.state == "up"     ? "Connected"
-                                            : adapter.state == "down" ? "Disconnected"
-                                                                      : "Unknown");
+            m_sections[i].rows[0]->setValue(adapter.state == "up"     ? tr("Connected")
+                                            : adapter.state == "down" ? tr("Disconnected")
+                                                                      : tr("Unknown"));
             m_sections[i].rows[1]->setValue(Monitor::formatRate(adapter.download));
             m_sections[i].rows[2]->setValue(Monitor::formatRate(adapter.upload));
             m_sections[i].rows[3]->setValue(adapter.address.empty() ? "—" : adapter.address);
@@ -317,8 +323,8 @@ void ResourcePage::update()
             const Volume& volume = metrics.volumes[i];
             m_volumes[i].title->setText(volume.mount);
             m_volumes[i].usage->setValue(volume.total > 0 ? double(volume.used) / double(volume.total) : 0);
-            m_volumes[i].rows[0]->setValue(Monitor::formatBytes(double(volume.used)) + " of "
-                                           + Monitor::formatBytes(double(volume.total)));
+            m_volumes[i].rows[0]->setValue(format(tr("{used} of {total}"), {{"used", Monitor::formatBytes(double(volume.used))},
+                                                                            {"total", Monitor::formatBytes(double(volume.total))}}));
             m_volumes[i].rows[1]->setValue(Monitor::formatBytes(double(volume.available)));
             m_volumes[i].rows[2]->setValue(volume.type.empty() ? "—" : volume.type);
         }
@@ -329,7 +335,7 @@ void ResourcePage::update()
             Section& section = m_sections[i];
             section.title->setText(gpu.name);
             section.rows[0]->setValue(gpu.driver.empty() ? "—" : gpu.driver);
-            section.rows[1]->setValue(gpu.active ? "Active" : "Powered off");
+            section.rows[1]->setValue(gpu.active ? tr("Active") : tr("Powered off"));
             section.rows[2]->setValue(Monitor::formatPercent(gpu.busy));
             section.rows[2]->setVisible(gpu.hasBusy);
             section.rows[3]->setValue(gpu.active && gpu.temperature >= 0 ? Monitor::formatTemperature(gpu.temperature)

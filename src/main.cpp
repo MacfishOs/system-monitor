@@ -8,6 +8,7 @@
 
 #include "base/application_registry.h"
 #include "base/dbus.h"
+#include "base/i18n.h"
 #include "ui/application.h"
 #include "ui/icon.h"
 
@@ -56,6 +57,7 @@ int main(int argc, char** argv)
 
     ui::Application app(argc, argv);
     app.setApplicationId("cutefish-system-monitor");
+    i18n::setDomain("cutefish-system-monitor");
     for (const auto& [name, svg] : embeddedIcons())
         ui::Icon::registerGlyph(std::string(name), std::string(svg));
 

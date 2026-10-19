@@ -10,6 +10,7 @@
 #include "summarycard.h"
 #include "textmetrics.h"
 
+#include "base/i18n.h"
 #include "ui/application.h"
 #include "ui/clipboard.h"
 #include "ui/dialog_window.h"
@@ -25,12 +26,17 @@
 #include <algorithm>
 
 using namespace cutefish::ui;
+using cutefish::i18n::format;
+using cutefish::i18n::tr;
+using cutefish::i18n::trn;
+using cutefish::i18n::trNoop;
 
 static constexpr double kSidebarWidth = 240;
 static constexpr double kHeaderHeight = 48;
 // The title and window buttons end on this line; content spacing is measured from it.
 static constexpr double kHeaderBaseline = 28;
-static const char* const kPageTitles[] = {"Processes", "CPU", "Memory", "Network", "Disk", "GPU"};
+static const char* const kPageTitles[] = {trNoop("Processes"), trNoop("CPU"), trNoop("Memory"),
+                                          trNoop("Network"), trNoop("Disk"), trNoop("GPU")};
 
 static std::vector<double> sumSeries(const std::vector<double>& first, const std::vector<double>& second)
 {
@@ -46,8 +52,8 @@ class HeaderContent : public View
 public:
     explicit HeaderContent(WindowHeader* header)
         : m_header(header)
-        , m_applicationTitle(addLabel(this, "System Monitor", 11))
-        , m_pageTitle(addLabel(this, kPageTitles[0], 11))
+        , m_applicationTitle(addLabel(this, tr("System Monitor"), 11))
+        , m_pageTitle(addLabel(this, tr(kPageTitles[0]), 11))
         , m_interval(addChild<HeaderButton>("menu", 32))
     {
         m_applicationTitle->setName("applicationTitle");
@@ -102,11 +108,11 @@ public:
         column->setSpacing(12);
         processesButton = column->addChild<ProcessesButton>();
         processesButton->setLayoutHints({.fillWidth = true});
-        cpu = column->addChild<SummaryCard>("CPU", "cpu", accent::blue);
-        memory = column->addChild<SummaryCard>("Memory", "memory", accent::purple);
-        network = column->addChild<SummaryCard>("Network", "network", accent::green);
-        disk = column->addChild<SummaryCard>("Disk", "disk", accent::orange);
-        gpu = column->addChild<SummaryCard>("GPU", "gpu", accent::pink);
+        cpu = column->addChild<SummaryCard>(tr("CPU"), "cpu", accent::blue);
+        memory = column->addChild<SummaryCard>(tr("Memory"), "memory", accent::purple);
+        network = column->addChild<SummaryCard>(tr("Network"), "network", accent::green);
+        disk = column->addChild<SummaryCard>(tr("Disk"), "disk", accent::orange);
+        gpu = column->addChild<SummaryCard>(tr("GPU"), "gpu", accent::pink);
         for (SummaryCard* card : {cpu, memory, network, disk, gpu})
             card->setLayoutHints({.fillWidth = true});
         sidebar->setName("resourceSidebar");
@@ -172,7 +178,7 @@ MainWindow::MainWindow(Monitor& monitor)
     : m_monitor(monitor)
     , m_toast(&m_window)
 {
-    m_window.setTitle("System Monitor");
+    m_window.setTitle(tr("System Monitor"));
     m_window.resize({1040, 700});
     m_window.setMinimumSize({840, 600});
     m_window.setRestoresSize("Main");
@@ -193,7 +199,7 @@ MainWindow::MainWindow(Monitor& monitor)
     }
 
     for (const auto& [text, interval] : std::vector<std::pair<const char*, int>>{
-             {"Update Every Second", 1000}, {"Update Every 2 Seconds", 2000}, {"Update Every 5 Seconds", 5000}}) {
+             {tr("Update Every Second"), 1000}, {tr("Update Every 2 Seconds"), 2000}, {tr("Update Every 5 Seconds"), 5000}}) {
         m_intervalMenu.addItem(text, [this, interval] { m_monitor.setInterval(interval); });
     }
     HeaderButton* intervalButton = m_root->content->intervalButton();
@@ -208,11 +214,11 @@ MainWindow::MainWindow(Monitor& monitor)
     };
     m_intervalMenu.onClosed = [intervalButton] { intervalButton->setChecked(false); };
 
-    m_contextMenu.addItem("Details", [this] { openDetails(); });
-    m_contextMenu.addItem("Copy Process ID", [this] { Clipboard::setText(std::to_string(m_selection.pid)); });
+    m_contextMenu.addItem(tr("Details"), [this] { openDetails(); });
+    m_contextMenu.addItem(tr("Copy Process ID"), [this] { Clipboard::setText(std::to_string(m_selection.pid)); });
     m_contextMenu.addSeparator();
-    m_contextMenu.addItem("Quit", [this] { confirmEnd(false); });
-    m_contextMenu.addItem("Force Quit", [this] { confirmEnd(true); });
+    m_contextMenu.addItem(tr("Quit"), [this] { confirmEnd(false); });
+    m_contextMenu.addItem(tr("Force Quit"), [this] { confirmEnd(true); });
 
     m_processes->onOpenDetails = [this] { openDetails(); };
     m_processes->onConfirmEnd = [this](bool force) { confirmEnd(force); };
@@ -244,7 +250,7 @@ void MainWindow::setCurrentPage(int page)
 {
     page = std::clamp(page, 0, 5);
     m_page = page;
-    m_root->content->pageTitle()->setText(kPageTitles[page]);
+    m_root->content->pageTitle()->setText(tr(kPageTitles[page]));
     m_root->processesButton->setSelected(page == 0);
     int index = 1;
     for (SummaryCard* card : {m_root->cpu, m_root->memory, m_root->network, m_root->disk, m_root->gpu})
@@ -291,13 +297,13 @@ void MainWindow::confirmEnd(bool force)
         return;
     const bool application = m_selection.application;
     const std::string name = process->displayName;
-    const std::string title = (force ? "Force quit " : "Quit ") + name + "?";
-    const char* text = application ? (force ? "All of its processes will stop immediately. Unsaved work may be lost."
-                                            : "The application will be asked to quit. Unsaved work may be lost.")
-                                   : (force ? "The process will stop immediately. Unsaved work may be lost."
-                                            : "The process will be asked to quit. Unsaved work may be lost.");
+    const std::string title = format(force ? tr("Force quit {name}?") : tr("Quit {name}?"), {{"name", name}});
+    const char* text = application ? (force ? tr("All of its processes will stop immediately. Unsaved work may be lost.")
+                                            : tr("The application will be asked to quit. Unsaved work may be lost."))
+                                   : (force ? tr("The process will stop immediately. Unsaved work may be lost.")
+                                            : tr("The process will be asked to quit. Unsaved work may be lost."));
     m_confirm = std::make_unique<ConfirmDialog>(&m_window, title, text);
-    m_confirm->setConfirmText(force ? "Force Quit" : "Quit");
+    m_confirm->setConfirmText(force ? tr("Force Quit") : tr("Quit"));
     m_confirm->setDestructive(true);
     m_confirm->onAccepted = [this, target = m_selection, force] {
         const std::string error = target.application ? m_monitor.endApplication(target.pid, target.startTicks, force)
@@ -327,17 +333,17 @@ void MainWindow::update()
 
     const auto set = [&](SummaryCard* card, std::string value, std::string subtitle, std::vector<double> values) {
         card->setValue(ready ? std::move(value) : "—");
-        card->setSubtitle(ready ? std::move(subtitle) : "Collecting data…");
+        card->setSubtitle(ready ? std::move(subtitle) : tr("Collecting data…"));
         card->setHistory(std::move(values), history.timestamps, duration);
     };
     set(m_root->cpu, Monitor::formatPercent(metrics.cpuPercent),
-        std::to_string(metrics.cores.size()) + " logical processors", history.cpuPercent);
+        trn("{n} logical processor", "{n} logical processors", metrics.cores.size()), history.cpuPercent);
     set(m_root->memory, Monitor::formatPercent(metrics.memory.percent),
         Monitor::formatBytes(double(metrics.memory.used)) + " / " + Monitor::formatBytes(double(metrics.memory.total)),
         history.memoryPercent);
     set(m_root->network, "↓ " + Monitor::formatRate(metrics.download), "↑ " + Monitor::formatRate(metrics.upload),
         sumSeries(history.download, history.upload));
-    set(m_root->disk, Monitor::formatRate(metrics.diskRead), "Write " + Monitor::formatRate(metrics.diskWrite),
+    set(m_root->disk, Monitor::formatRate(metrics.diskRead), format(tr("Write {rate}"), {{"rate", Monitor::formatRate(metrics.diskWrite)}}),
         sumSeries(history.diskRead, history.diskWrite));
     m_root->gpu->setVisible(metrics.gpuAvailable);
     set(m_root->gpu,

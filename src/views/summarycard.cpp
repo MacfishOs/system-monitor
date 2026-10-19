@@ -7,6 +7,7 @@
 #include "historygraph.h"
 #include "textmetrics.h"
 
+#include "base/i18n.h"
 #include "ui/icon.h"
 #include "ui/keys.h"
 #include "ui/label.h"
@@ -16,6 +17,7 @@
 #include <algorithm>
 
 using namespace cutefish::ui;
+using cutefish::i18n::tr;
 
 static constexpr double kPadding = 12;
 static constexpr double kIcon = 16;
@@ -73,7 +75,7 @@ bool SidebarButton::keyRelease(const KeyEvent& event)
 
 ProcessesButton::ProcessesButton()
     : m_icon(addChild<Icon>("processes", kIcon))
-    , m_title(addLabel(this, "Processes", 0, 500))
+    , m_title(addLabel(this, tr("Processes"), 0, 500))
     , m_count(addLabel(this, {}, 9))
 {
 }
@@ -116,7 +118,7 @@ SummaryCard::SummaryCard(std::string title, std::string icon, Color color)
     , m_icon(addChild<Icon>(std::move(icon), kIcon))
     , m_title(addLabel(this, std::move(title), 9, 500))
     , m_value(addLabel(this, "—", 9, 500))
-    , m_subtitle(addLabel(this, "Collecting data…", 8))
+    , m_subtitle(addLabel(this, tr("Collecting data…"), 8))
     , m_graph(addChild<HistoryGraph>())
 {
     m_icon->setColor(color);

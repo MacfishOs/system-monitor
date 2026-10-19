@@ -61,7 +61,9 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE SYSTEM_MONITOR_VERSION="${PRO
 target_link_libraries(${PROJECT_NAME} PRIVATE monitor-ui)
 
 install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-install(FILES cutefish-system-monitor.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+
+cutefish_add_translations(cutefish-system-monitor SOURCES src DESKTOP_FILES cutefish-system-monitor.desktop)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/cutefish-system-monitor.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
 
 if(BUILD_TESTING)
     add_subdirectory(tests)

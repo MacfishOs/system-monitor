@@ -7,6 +7,7 @@
 #include "monitor.h"
 #include "procreader.h"
 
+#include "base/i18n.h"
 #include "ui/icon.h"
 #include "ui/keys.h"
 #include "ui/label.h"
@@ -20,6 +21,9 @@
 #include <algorithm>
 
 using namespace cutefish::ui;
+using cutefish::i18n::format;
+using cutefish::i18n::tr;
+using cutefish::i18n::trNoop;
 
 // The dialog is 612 high: the toolkit's 44 header and 16 bottom padding around this.
 static constexpr double kContentHeight = 612 - 44 - 16;
@@ -112,15 +116,16 @@ public:
 
         m_card = m_column->addChild<ListCard>();
         m_card->setLayoutHints({.fillWidth = true});
-        for (const char* text : {"User", "State", "Processes", "CPU", "Memory", "Threads", "Nice value", "Parent process"})
-            m_rows.push_back(m_card->addRow(text));
+        for (const char* text : {trNoop("User"), trNoop("State"), trNoop("Processes"), trNoop("CPU"), trNoop("Memory"),
+                                 trNoop("Threads"), trNoop("Nice value"), trNoop("Parent process")})
+            m_rows.push_back(m_card->addRow(tr(text)));
         m_rows[1]->setVisible(!application);
         m_rows[2]->setVisible(application);
         m_rows[6]->setVisible(!application);
         m_rows[7]->setVisible(!application);
         m_card->updateSeparators();
 
-        m_section = m_column->addChild<SectionLabel>(application ? "Processes" : "Command");
+        m_section = m_column->addChild<SectionLabel>(application ? tr("Processes") : tr("Command"));
         m_section->setLayoutHints({.fillWidth = true});
         m_plate = m_column->addChild<FilledPlate>(Theme::current().bigRadius);
         m_plate->setLayoutHints({.fillWidth = true, .fillHeight = true});
@@ -147,10 +152,10 @@ public:
     void update(const ProcessRecord* process)
     {
         m_icon->setIconName(process && !process->iconName.empty() ? process->iconName : "application-x-executable");
-        m_name->setText(process ? process->displayName : m_application ? "Application quit" : "Process exited");
+        m_name->setText(process ? process->displayName : m_application ? tr("Application quit") : tr("Process exited"));
         m_rows[0]->setValue(process && !process->user.empty() ? process->user : "—");
         const std::string state = process ? ProcReader::stateName(process->state) : std::string();
-        m_rows[1]->setValue(state.empty() ? "Exited" : state);
+        m_rows[1]->setValue(state.empty() ? tr("Exited") : state);
         m_rows[2]->setValue(process && !process->members.empty() ? std::to_string(process->members.size()) : "—");
         m_rows[3]->setValue(Monitor::formatPercent(process ? process->cpu : 0));
         m_rows[4]->setValue(Monitor::formatBytes(process ? double(process->memory) : 0));
@@ -171,7 +176,7 @@ public:
         requestLayout();
     }
 
-    void setPid(int pid) { m_pid->setText("PID " + std::to_string(pid)); }
+    void setPid(int pid) { m_pid->setText(format(tr("PID {pid}"), {{"pid", std::to_string(pid)}})); }
 
     double heightForWidth(double) const override { return kContentHeight; }
     SizeF sizeHint() const override { return {0, kContentHeight}; }
@@ -201,7 +206,7 @@ private:
 ProcessDetails::ProcessDetails(Window* parent, Monitor& monitor, const Selection& target)
     : m_monitor(monitor)
     , m_target(target)
-    , m_dialog(parent, target.application ? "Application Details" : "Process Details", 480)
+    , m_dialog(parent, target.application ? tr("Application Details") : tr("Process Details"), 480)
 {
     auto content = std::make_unique<Content>(target.application);
     m_content = content.get();

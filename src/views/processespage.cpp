@@ -8,6 +8,7 @@
 #include "monitor.h"
 #include "processlist.h"
 
+#include "base/i18n.h"
 #include "ui/icon.h"
 #include "ui/keys.h"
 #include "ui/label.h"
@@ -22,6 +23,8 @@
 #include <array>
 
 using namespace cutefish::ui;
+using cutefish::i18n::tr;
+using cutefish::i18n::trNoop;
 
 static constexpr double kMargin = 12;
 static constexpr double kTop = 22;
@@ -45,12 +48,12 @@ struct TableColumn
 
 // The name column takes what the others leave.
 static constexpr std::array<TableColumn, 6> kColumns{{
-    {"name", "Name", 0},
-    {"cpu", "CPU", kCpuWidth},
-    {"memory", "Memory", kMemoryWidth},
-    {"read", "Read", kIoWidth},
-    {"write", "Write", kIoWidth},
-    {"pid", "PID", kPidWidth},
+    {"name", trNoop("Name"), 0},
+    {"cpu", trNoop("CPU"), kCpuWidth},
+    {"memory", trNoop("Memory"), kMemoryWidth},
+    {"read", trNoop("Read"), kIoWidth},
+    {"write", trNoop("Write"), kIoWidth},
+    {"pid", trNoop("PID"), kPidWidth},
 }};
 
 bool ProcessListView::keyPress(const KeyEvent& event)
@@ -335,8 +338,8 @@ protected:
 ProcessesPage::ProcessesPage(Monitor& monitor, Selection& selection)
     : m_monitor(monitor)
     , m_selection(selection)
-    , m_scope(addChild<SegmentedControl>(std::vector<std::string>{"Applications", "My Processes", "All Processes"}))
-    , m_search(addChild<SearchField>("Search processes"))
+    , m_scope(addChild<SegmentedControl>(std::vector<std::string>{tr("Applications"), tr("My Processes"), tr("All Processes")}))
+    , m_search(addChild<SearchField>(tr("Search processes")))
     , m_quit(addChild<QuitButton>())
     , m_table(addChild<Plate>(Theme::current().bigRadius))
     , m_hairline(m_table->addChild<Hairline>())
@@ -372,7 +375,7 @@ ProcessesPage::ProcessesPage(Monitor& monitor, Selection& selection)
 
     m_table->setClipsChildren(true);
     for (const TableColumn& column : kColumns) {
-        ColumnHeader* header = m_table->addChild<ColumnHeader>(column.key, column.title, column.width > 0);
+        ColumnHeader* header = m_table->addChild<ColumnHeader>(column.key, tr(column.title), column.width > 0);
         header->onClicked = [this, key = std::string(column.key)] { m_monitor.sortBy(key); };
         m_headers.push_back(header);
     }
@@ -491,8 +494,8 @@ void ProcessesPage::reload()
     m_list->setRowCount(count);
     m_list->reload();
     m_empty->setVisible(count == 0 && m_monitor.ready());
-    m_emptyTitle->setText(applicationsMode() ? "No applications found" : "No processes found");
-    m_emptyText->setText("Try a different name, user, or process ID.");
+    m_emptyTitle->setText(applicationsMode() ? tr("No applications found") : tr("No processes found"));
+    m_emptyText->setText(tr("Try a different name, user, or process ID."));
     selectionChanged();
     requestLayout();
 }

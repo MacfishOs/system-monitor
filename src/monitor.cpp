@@ -7,6 +7,7 @@
 #include "preferences.h"
 #include "procreader.h"
 
+#include "base/i18n.h"
 #include "base/locale.h"
 
 #include <algorithm>
@@ -18,6 +19,9 @@
 #include <unordered_set>
 
 using namespace std::chrono_literals;
+using cutefish::i18n::format;
+using cutefish::i18n::tr;
+using cutefish::i18n::trNoop;
 
 // Programs and application ids no process has named for this many samples are
 // looked up again if they return; titles some programs set make the set unbounded.
@@ -156,7 +160,9 @@ void Monitor::identify(ProcessRecord* process)
     if (!application->second.icon.empty())
         process->iconName = application->second.icon;
     if (!process->helperType.empty())
-        process->displayName += " (" + ProcReader::helperName(process->helperType) + ")";
+        // TRANSLATORS: a browser's helper process, such as "Chromium (Renderer)".
+        process->displayName = format(tr("{name} ({helper})"),
+                                      {{"name", process->displayName}, {"helper", ProcReader::helperName(process->helperType)}});
 }
 
 std::vector<ProcessRecord> Monitor::groupApplications(const std::vector<ProcessRecord>& processes)
@@ -295,15 +301,18 @@ const ProcessRecord* Monitor::application(int pid, uint64_t startTicks) const
     return record && record->startTicks == startTicks ? record : nullptr;
 }
 
-static const char* const kExited = "The process has already exited.";
+static const char* exitedText()
+{
+    return tr("The process has already exited.");
+}
 
 std::string Monitor::endApplication(int pid, uint64_t startTicks, bool force)
 {
     const ProcessRecord* record = application(pid, startTicks);
     if (!record)
-        return "The application has already quit.";
+        return tr("The application has already quit.");
     if (!canManage(*record))
-        return "This application cannot be quit here.";
+        return tr("This application cannot be quit here.");
 
     // Asking only the processes the application started lets it close its
     // own children; forcing it stops every one of them.
@@ -318,13 +327,13 @@ std::string Monitor::endApplication(int pid, uint64_t startTicks, bool force)
         const std::string result = signalProcess(member.pid, member.startTicks, force);
         if (result.empty())
             signalled = true;
-        else if (result != kExited && error.empty())
+        else if (result != exitedText() && error.empty())
             error = result;
     }
     if (!error.empty())
         return error;
     if (!signalled)
-        return "The application has already quit.";
+        return tr("The application has already quit.");
     sample();
     return {};
 }
@@ -370,26 +379,26 @@ std::string Monitor::endProcess(int pid, uint64_t startTicks, bool force)
 std::string Monitor::signalProcess(int pid, uint64_t startTicks, bool force)
 {
     if (pid <= 1 || pid == getpid())
-        return "This process cannot be ended here.";
+        return tr("This process cannot be ended here.");
 
     // A pidfd binds the signal to this process even if its PID is reused.
     const int descriptor = int(syscall(SYS_pidfd_open, pid, 0));
     if (descriptor < 0)
-        return errno == ESRCH ? kExited : std::string("Unable to open the process: ") + std::strerror(errno);
+        return errno == ESRCH ? exitedText() : format(tr("Unable to open the process: {error}"), {{"error", std::strerror(errno)}});
 
     ProcessRecord record;
     std::string error;
     if (!ProcReader::parseProcess(readFile("/proc/" + std::to_string(pid) + "/stat"), &record, 1)
         || record.startTicks != startTicks) {
-        error = kExited;
+        error = exitedText();
     } else if (syscall(SYS_pidfd_send_signal, descriptor, force ? SIGKILL : SIGTERM, nullptr, 0) != 0) {
         const int failure = errno;
         if (failure == ESRCH)
-            error = kExited;
+            error = exitedText();
         else if (failure == EPERM)
-            error = "You can only end your own processes.";
+            error = tr("You can only end your own processes.");
         else
-            error = std::string("Unable to end the process: ") + std::strerror(failure);
+            error = format(tr("Unable to end the process: {error}"), {{"error", std::strerror(failure)}});
     }
     close(descriptor);
     return error;
@@ -397,19 +406,21 @@ std::string Monitor::signalProcess(int pid, uint64_t startTicks, bool force)
 
 std::string Monitor::formatBytes(double bytes)
 {
-    static const char* const units[] = {"B", "KiB", "MiB", "GiB", "TiB"};
+    static const char* const units[] = {trNoop("B"), trNoop("KiB"), trNoop("MiB"), trNoop("GiB"), trNoop("TiB")};
     int unit = 0;
     bytes = std::max(0.0, bytes);
     while (bytes >= 1024 && unit < 4) {
         bytes /= 1024;
         ++unit;
     }
-    return cutefish::base::Locale::system().toString(bytes, unit == 0 ? 0 : 1) + ' ' + units[unit];
+    // TRANSLATORS: a size, such as "1.5 MiB".
+    return format(tr("{value} {unit}"),
+                  {{"value", cutefish::base::Locale::system().toString(bytes, unit == 0 ? 0 : 1)}, {"unit", tr(units[unit])}});
 }
 
 std::string Monitor::formatRate(double bytes)
 {
-    return formatBytes(bytes) + "/s";
+    return format(tr("{size}/s"), {{"size", formatBytes(bytes)}});
 }
 
 std::string Monitor::formatPercent(double percent)

@@ -6,12 +6,14 @@
 #include "historygraph.h"
 #include "monitor.h"
 
+#include "base/i18n.h"
 #include "ui/cell_layout.h"
 #include "ui/theme.h"
 
 #include <algorithm>
 
 using namespace cutefish::ui;
+using cutefish::i18n::tr;
 
 static constexpr double kPadding = 16;
 static constexpr double kSpacing = 10;
@@ -42,7 +44,7 @@ ChartCard::ChartCard()
     bottom->addChild<View>()->setLayoutHints({.fillWidth = true});
     m_primaryLegend = addLabel(bottom, {}, 8);
     m_secondaryLegend = addLabel(bottom, {}, 8);
-    m_now = addLabel(bottom, "Now", 8);
+    m_now = addLabel(bottom, tr("Now"), 8);
 }
 
 void ChartCard::setTitle(std::string title)
