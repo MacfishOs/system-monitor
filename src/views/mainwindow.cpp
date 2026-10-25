@@ -72,17 +72,14 @@ protected:
         const Window* window = this->window();
         const Color color = !window || window->isActive() ? theme.text : theme.disabledText;
         const TextMetrics metrics = textMetrics(m_applicationTitle);
-        const double top = snapToDevice(this, kHeaderBaseline - metrics.ascent);
-        // The window buttons centre on the title's capitals.
-        const double capCenter = snapToDevice(this, snapToDevice(this, kHeaderBaseline) - metrics.capHeight / 2);
-        const double buttonTop = capCenter - 16;
-        m_header->setButtonMargin(buttonTop);
+        const double top = snapToDevice(this, (kHeaderHeight - metrics.lineHeight) / 2.0);
+        m_header->setButtonsCentered(true);
 
         m_applicationTitle->setColor(color);
-        m_applicationTitle->setGeometry({20, top, kSidebarWidth - 20, metrics.lineHeight});
+        m_applicationTitle->setGeometry({0, top, kSidebarWidth - 72, metrics.lineHeight});
         const double right = geometry().width;
-        m_interval->setGeometry({right - 32, buttonTop, 32, 32});
-        const double pageX = 20 + kSidebarWidth - 20 + 12;
+        m_interval->setGeometry({right - 32, (kHeaderHeight - 32) / 2.0, 32, 32});
+        const double pageX = kSidebarWidth - 72 + 12;
         m_pageTitle->setColor(color);
         m_pageTitle->setGeometry({pageX, top, std::max(0.0, right - 32 - 12 - pageX), metrics.lineHeight});
     }
@@ -159,8 +156,8 @@ protected:
         header->setGeometry({0, 0, width, kHeaderHeight});
         sidebar->setGeometry({0, kHeaderHeight, kSidebarWidth, std::max(0.0, height - kHeaderHeight)});
         if (processes)
-            processes->setGeometry({kSidebarWidth, kHeaderBaseline, std::max(0.0, width - kSidebarWidth),
-                                    std::max(0.0, height - kHeaderBaseline)});
+            processes->setGeometry({kSidebarWidth, kHeaderHeight, std::max(0.0, width - kSidebarWidth),
+                                    std::max(0.0, height - kHeaderHeight)});
         pages->setGeometry({kSidebarWidth, kHeaderHeight, std::max(0.0, width - kSidebarWidth),
                             std::max(0.0, height - kHeaderHeight)});
         for (const auto& page : pages->children())
